@@ -34,6 +34,17 @@ const DEFAULT_ANALYZE_PARAMS = {
   max_comments: 10,
 };
 
+/** Style kit — chart colors on cream panels */
+const CHART = {
+  paprika: "rgba(232, 114, 74, 0.88)",
+  chili: "rgba(200, 75, 47, 0.92)",
+  brick: "#8b3520",
+  saffron: "rgba(245, 192, 122, 0.95)",
+  grid: "rgba(232, 224, 216, 0.85)",
+  tick: "#8b6a4a",
+  legend: "#1a1008",
+};
+
 function fmt(value, digits = 2) {
   if (value === null || value === undefined) return "N/A";
   if (typeof value === "number") {
@@ -123,7 +134,7 @@ function renderDurationChart(patterns) {
         {
           label: "Avg engagement rate",
           data: filtered.map((p) => (p.avg_engagement_rate || 0) * 100),
-          backgroundColor: "rgba(86, 156, 246, 0.75)",
+          backgroundColor: CHART.paprika,
           borderRadius: 8,
           yAxisID: "y",
         },
@@ -131,8 +142,8 @@ function renderDurationChart(patterns) {
           label: "Video count (n)",
           data: filtered.map((p) => p.video_count || 0),
           type: "line",
-          borderColor: "rgba(233, 241, 252, 0.9)",
-          backgroundColor: "rgba(233, 241, 252, 0.9)",
+          borderColor: CHART.brick,
+          backgroundColor: CHART.saffron,
           pointRadius: 4,
           borderWidth: 2,
           tension: 0.25,
@@ -143,7 +154,10 @@ function renderDurationChart(patterns) {
     options: {
       responsive: true,
       plugins: {
-        legend: { display: true },
+        legend: {
+          display: true,
+          labels: { color: CHART.legend, font: { size: 12, family: "'DM Sans', sans-serif" } },
+        },
         tooltip: {
           callbacks: {
             afterBody(context) {
@@ -158,11 +172,18 @@ function renderDurationChart(patterns) {
         },
       },
       scales: {
-        y: { ticks: { callback: (v) => `${v}%` } },
+        x: {
+          ticks: { color: CHART.tick, font: { size: 11 } },
+          grid: { color: CHART.grid },
+        },
+        y: {
+          ticks: { color: CHART.tick, callback: (v) => `${v}%` },
+          grid: { color: CHART.grid },
+        },
         yCount: {
           position: "right",
           grid: { drawOnChartArea: false },
-          ticks: { precision: 0 },
+          ticks: { precision: 0, color: CHART.tick },
         },
       },
     },
@@ -181,7 +202,7 @@ function renderUploadChart(uploadFrequency) {
         {
           label: "Videos published",
           data: uploadFrequency.map((x) => x.video_count),
-          backgroundColor: "rgba(43, 116, 188, 0.8)",
+          backgroundColor: CHART.chili,
           borderRadius: 8,
         },
       ],
@@ -190,9 +211,14 @@ function renderUploadChart(uploadFrequency) {
       responsive: true,
       plugins: { legend: { display: false } },
       scales: {
+        x: {
+          ticks: { color: CHART.tick, maxRotation: 45, minRotation: 0, font: { size: 10 } },
+          grid: { color: CHART.grid },
+        },
         y: {
           beginAtZero: true,
-          ticks: { precision: 0 },
+          ticks: { precision: 0, color: CHART.tick },
+          grid: { color: CHART.grid },
           suggestedMax: Math.max(2, ...uploadFrequency.map((x) => x.video_count || 0)),
         },
       },
@@ -281,7 +307,7 @@ function renderSponsor(sponsorship) {
       datasets: [
         {
           data: [spCount, orgCount],
-          backgroundColor: ["#3d6fa3", "#9ec5eb"],
+          backgroundColor: [CHART.chili, CHART.saffron],
           borderWidth: 0,
           hoverOffset: 4,
         },
