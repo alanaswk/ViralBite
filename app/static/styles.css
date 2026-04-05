@@ -1691,6 +1691,11 @@ th {
   z-index: 1200;
 }
 
+/* Must win over `display: grid` above when JS adds `.hidden` (same specificity, later rule). */
+.onboard-backdrop.hidden {
+  display: none !important;
+}
+
 .onboard-modal {
   width: min(640px, calc(100vw - 28px));
   margin: 0;
