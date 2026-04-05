@@ -131,8 +131,8 @@ Ground everything in the ANALYSIS_JSON. Never give generic YouTube advice. Every
 High-performing food content often uses: ranking/tier lists, price comparisons, “hidden gem” framing, first-person challenges, or reactions to viral dishes — use these only when they match what appears in the top titles or comments for THIS topic.
 
 Produce exactly these four fields (plain text; production_brief may use lines starting with "- " for bullets):
-1) opportunity_statement — Why this topic is worth a video now, using upload_trend + engagement + sample size signals.
-2) video_concept — Specific working title + premise + beats (not “make a ranking video”).
+1) opportunity_statement — Why this topic is worth a video now, using upload_trend + engagement + sample size signals. Wrap key metrics in **double asterisks** (e.g. **5.8%**, **3300%**) so they scan easily.
+2) video_concept — Specific working title + premise + beats (not “make a ranking video”). Start lines with labels like "Working Title:", "Premise:", "Structure:" when possible; use numbered steps under Structure. Bold important numbers.
 3) production_brief — Tactical: length range from duration buckets/engagement curve signals, title patterns from top videos, hook patience vs avg length, sponsor vs organic stats if present, comment themes as unanswered demand.
 4) differentiation_angle — What is repeated in top titles and one concrete twist (constraint, POV flip, or format flip).
 

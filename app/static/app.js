@@ -346,9 +346,16 @@ function renderTopVideos(videos) {
   topVideosBodyEl.innerHTML = "";
   videos.forEach((video, idx) => {
     const tr = document.createElement("tr");
+    const vid = video.video_id != null ? String(video.video_id).trim() : "";
+    const titleText = video.title || "Untitled";
+    const titleHtml = escapeHtml(titleText);
+    const titleCell =
+      vid !== ""
+        ? `<a href="https://www.youtube.com/watch?v=${encodeURIComponent(vid)}" class="video-title-link" target="_blank" rel="noopener noreferrer">${titleHtml}</a>`
+        : `<strong>${titleHtml}</strong>`;
     tr.innerHTML = `
       <td>${idx + 1}</td>
-      <td><strong>${video.title || "Untitled"}</strong><div class="muted">${video.channel_title || ""}</div></td>
+      <td>${titleCell}<div class="muted">${escapeHtml(video.channel_title || "")}</div></td>
       <td>${fmt(video.view_count || 0, 0)}</td>
       <td>${fmt((video.engagement_rate || 0) * 100, 2)}%</td>
       <td>${toMinutes(video.duration_seconds || 0)}</td>
@@ -397,31 +404,117 @@ function escapeHtml(text) {
   return d.innerHTML;
 }
 
+/** Safe subset: **bold** only (after split, segments are escaped). */
+function formatInlineMarkdown(text) {
+  if (text == null) return "";
+  const s = String(text);
+  const parts = s.split(/\*\*([^*]+)\*\*/);
+  let out = "";
+  for (let i = 0; i < parts.length; i++) {
+    if (i % 2 === 0) out += escapeHtml(parts[i]);
+    else out += `<strong class="brief-em">${escapeHtml(parts[i])}</strong>`;
+  }
+  return out;
+}
+
+function renderBriefProseParagraphs(text) {
+  const paras = String(text || "")
+    .split(/\n\n+/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+  if (!paras.length) return `<p class="brief-prose"><span class="brief-prose-muted">—</span></p>`;
+  return paras.map((p) => `<p class="brief-prose">${formatInlineMarkdown(p)}</p>`).join("");
+}
+
+function renderVideoConceptHtml(text) {
+  const raw = String(text || "");
+  const lines = raw.split(/\n/);
+  let html = "";
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const colonIdx = trimmed.indexOf(":");
+    if (colonIdx > 0 && colonIdx < 56) {
+      const before = trimmed.slice(0, colonIdx).trim();
+      const after = trimmed.slice(colonIdx + 1).trim();
+      const wordCount = before.split(/\s+/).length;
+      if (
+        wordCount <= 8 &&
+        before.length <= 52 &&
+        /^[A-Za-z]/.test(before) &&
+        !/^\d/.test(before.trim())
+      ) {
+        html += `<div class="brief-concept-row">
+          <span class="brief-concept-label">${escapeHtml(before)}</span>
+          <div class="brief-concept-value">${formatInlineMarkdown(after)}</div>
+        </div>`;
+        continue;
+      }
+    }
+    if (/^\d+\.\s/.test(trimmed)) {
+      const rest = trimmed.replace(/^\d+\.\s+/, "");
+      html += `<div class="brief-concept-step">${formatInlineMarkdown(rest)}</div>`;
+      continue;
+    }
+    html += `<p class="brief-concept-lead">${formatInlineMarkdown(trimmed)}</p>`;
+  }
+  const inner = html || `<p class="brief-prose">${formatInlineMarkdown(raw)}</p>`;
+  return `<div class="brief-video-concept">${inner}</div>`;
+}
+
+function renderProductionBriefHtml(text) {
+  const lines = String(text || "").split(/\n/);
+  const bullets = [];
+  const paras = [];
+  for (const line of lines) {
+    const t = line.trim();
+    if (!t) continue;
+    if (t.startsWith("- ") || t.startsWith("• ")) {
+      bullets.push(`<li>${formatInlineMarkdown(t.replace(/^[-•]\s+/, ""))}</li>`);
+    } else {
+      paras.push(`<p class="brief-prose brief-prose-tight">${formatInlineMarkdown(t)}</p>`);
+    }
+  }
+  let out = paras.join("");
+  if (bullets.length) {
+    out += `<ul class="brief-bullet-list">${bullets.join("")}</ul>`;
+  }
+  return out || `<p class="brief-prose-muted">—</p>`;
+}
+
 function renderCreatorBrief(finalResponse, query) {
   const topic = (query || "").trim() || "topic";
   if (creatorBriefTitleEl) {
-    creatorBriefTitleEl.textContent = `Your '${topic}' summary`;
+    creatorBriefTitleEl.textContent = `Your ${topic} video recommendation`;
   }
 
   const brief = finalResponse?.creator_brief || {};
   const conf = finalResponse?.brief_confidence || {};
 
   if (briefConfidenceEl) {
-    const bits = [];
-    if (conf.sample_size != null) bits.push(`n=${fmt(conf.sample_size, 0)}`);
-    if (conf.unique_channels != null) bits.push(`${fmt(conf.unique_channels, 0)} channels`);
+    const chips = [];
+    if (conf.sample_size != null) {
+      chips.push(`<span class="brief-chip" title="Videos in analysis sample">n=${escapeHtml(fmt(conf.sample_size, 0))}</span>`);
+    }
+    if (conf.unique_channels != null) {
+      chips.push(
+        `<span class="brief-chip" title="Distinct channels">${escapeHtml(fmt(conf.unique_channels, 0))} channels</span>`
+      );
+    }
     if (conf.top_two_channel_share_pct != null) {
-      bits.push(`top 2 channels: ${fmt(conf.top_two_channel_share_pct, 0)}%`);
+      chips.push(
+        `<span class="brief-chip" title="Share of views from the two largest channels">Top 2 ch. ${escapeHtml(fmt(conf.top_two_channel_share_pct, 0))}%</span>`
+      );
     }
 
-    if (!bits.length && !conf.message) {
+    if (!chips.length && !conf.message) {
       briefConfidenceEl.classList.add("hidden");
       briefConfidenceEl.innerHTML = "";
     } else {
       briefConfidenceEl.classList.remove("hidden");
       briefConfidenceEl.innerHTML = `
         <div class="brief-confidence-inner">
-          ${bits.length ? `<p class="brief-confidence-stats">${escapeHtml(bits.join(" · "))}</p>` : ""}
+          ${chips.length ? `<div class="brief-confidence-chips">${chips.join("")}</div>` : ""}
           ${conf.message ? `<p class="brief-confidence-msg">${escapeHtml(conf.message)}</p>` : ""}
         </div>`;
     }
@@ -431,21 +524,20 @@ function renderCreatorBrief(finalResponse, query) {
 
   if (brief.opportunity_statement) {
     const sections = [
-      { title: "The opportunity", body: brief.opportunity_statement },
-      { title: "The video concept", body: brief.video_concept },
-      { title: "The production brief", body: brief.production_brief, pre: true },
-      { title: "The differentiation angle", body: brief.differentiation_angle },
+      { step: "1", title: "The opportunity", html: renderBriefProseParagraphs(brief.opportunity_statement) },
+      { step: "2", title: "The video concept", html: renderVideoConceptHtml(brief.video_concept) },
+      { step: "3", title: "The production brief", html: renderProductionBriefHtml(brief.production_brief) },
+      { step: "4", title: "The differentiation angle", html: renderBriefProseParagraphs(brief.differentiation_angle) },
     ];
     creatorBriefBodyEl.innerHTML = sections
       .map(
         (s) => `
-      <article class="brief-block">
-        <h3 class="brief-block-title">${escapeHtml(s.title)}</h3>
-        ${
-          s.pre
-            ? `<div class="brief-block-pre">${escapeHtml(s.body)}</div>`
-            : `<div class="brief-block-body"><p>${escapeHtml(s.body)}</p></div>`
-        }
+      <article class="brief-block-card">
+        <header class="brief-block-header">
+          <span class="brief-block-step" aria-hidden="true">${escapeHtml(s.step)}</span>
+          <h3 class="brief-block-title">${escapeHtml(s.title)}</h3>
+        </header>
+        <div class="brief-block-content">${s.html}</div>
       </article>`
       )
       .join("");
@@ -455,7 +547,9 @@ function renderCreatorBrief(finalResponse, query) {
   const legacySummary = brief.summary || "No creator summary generated.";
   const recs = brief.recommendations || [];
   creatorBriefBodyEl.innerHTML = `
-    <article class="brief-block"><div class="brief-block-body"><p>${escapeHtml(legacySummary)}</p></div></article>
+    <article class="brief-block-card">
+      <div class="brief-block-content"><p class="brief-prose">${escapeHtml(legacySummary)}</p></div>
+    </article>
     ${recs.length ? `<ul class="brief-legacy-recs">${recs.map((r) => `<li>${escapeHtml(r)}</li>`).join("")}</ul>` : ""}
   `;
 }
