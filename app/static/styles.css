@@ -378,6 +378,82 @@ th {
   line-height: 1.6;
 }
 
+.creator-brief-panel .section-title h2 {
+  font-size: 22px;
+  letter-spacing: -0.02em;
+}
+
+.brief-confidence {
+  margin-bottom: 14px;
+}
+
+.brief-confidence-inner {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: rgba(15, 23, 38, 0.55);
+}
+
+.brief-confidence-stats {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+}
+
+.brief-confidence-msg {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: #e8c36a;
+  line-height: 1.45;
+}
+
+.brief-confidence-inner .brief-confidence-msg:first-child {
+  margin-top: 0;
+}
+
+.creator-brief-body {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.brief-block-title {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #b6d2ee;
+}
+
+.brief-block-body {
+  margin: 0;
+  color: #d1d8e3;
+  line-height: 1.6;
+  font-size: 15px;
+}
+
+.brief-block-body p {
+  margin: 0;
+}
+
+.brief-block-pre {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.55;
+  color: #d1d8e3;
+  white-space: pre-wrap;
+  font-family: inherit;
+}
+
+.brief-legacy-recs {
+  margin: 0;
+  padding-left: 18px;
+  color: #d1d8e3;
+  line-height: 1.55;
+}
+
 .chat-panel {
   display: grid;
   grid-template-rows: auto 1fr auto;

@@ -13,8 +13,9 @@ const sentimentMetaEl = document.getElementById("sentiment-meta");
 const sponsorMetaEl = document.getElementById("sponsor-meta");
 const sponsorLegendEl = document.getElementById("sponsor-legend");
 const topVideosBodyEl = document.querySelector("#top-videos-table tbody");
-const nlpSummaryEl = document.getElementById("nlp-summary");
-const recommendationsEl = document.getElementById("recommendations");
+const creatorBriefTitleEl = document.getElementById("creator-brief-title");
+const briefConfidenceEl = document.getElementById("brief-confidence");
+const creatorBriefBodyEl = document.getElementById("creator-brief-body");
 const chatMessagesEl = document.getElementById("chat-messages");
 const chatInputEl = document.getElementById("chat-input");
 const chatSendBtn = document.getElementById("chat-send-btn");
@@ -389,11 +390,74 @@ async function sendChat() {
   chatHistory.push({ role: "assistant", content: text });
 }
 
-function renderCreatorBrief(finalResponse) {
+function escapeHtml(text) {
+  if (text === null || text === undefined) return "";
+  const d = document.createElement("div");
+  d.textContent = String(text);
+  return d.innerHTML;
+}
+
+function renderCreatorBrief(finalResponse, query) {
+  const topic = (query || "").trim() || "topic";
+  if (creatorBriefTitleEl) {
+    creatorBriefTitleEl.textContent = `Your '${topic}' summary`;
+  }
+
   const brief = finalResponse?.creator_brief || {};
-  nlpSummaryEl.textContent = brief.summary || "No creator summary generated.";
+  const conf = finalResponse?.brief_confidence || {};
+
+  if (briefConfidenceEl) {
+    const bits = [];
+    if (conf.sample_size != null) bits.push(`n=${fmt(conf.sample_size, 0)}`);
+    if (conf.unique_channels != null) bits.push(`${fmt(conf.unique_channels, 0)} channels`);
+    if (conf.top_two_channel_share_pct != null) {
+      bits.push(`top 2 channels: ${fmt(conf.top_two_channel_share_pct, 0)}%`);
+    }
+
+    if (!bits.length && !conf.message) {
+      briefConfidenceEl.classList.add("hidden");
+      briefConfidenceEl.innerHTML = "";
+    } else {
+      briefConfidenceEl.classList.remove("hidden");
+      briefConfidenceEl.innerHTML = `
+        <div class="brief-confidence-inner">
+          ${bits.length ? `<p class="brief-confidence-stats">${escapeHtml(bits.join(" · "))}</p>` : ""}
+          ${conf.message ? `<p class="brief-confidence-msg">${escapeHtml(conf.message)}</p>` : ""}
+        </div>`;
+    }
+  }
+
+  if (!creatorBriefBodyEl) return;
+
+  if (brief.opportunity_statement) {
+    const sections = [
+      { title: "The opportunity", body: brief.opportunity_statement },
+      { title: "The video concept", body: brief.video_concept },
+      { title: "The production brief", body: brief.production_brief, pre: true },
+      { title: "The differentiation angle", body: brief.differentiation_angle },
+    ];
+    creatorBriefBodyEl.innerHTML = sections
+      .map(
+        (s) => `
+      <article class="brief-block">
+        <h3 class="brief-block-title">${escapeHtml(s.title)}</h3>
+        ${
+          s.pre
+            ? `<div class="brief-block-pre">${escapeHtml(s.body)}</div>`
+            : `<div class="brief-block-body"><p>${escapeHtml(s.body)}</p></div>`
+        }
+      </article>`
+      )
+      .join("");
+    return;
+  }
+
+  const legacySummary = brief.summary || "No creator summary generated.";
   const recs = brief.recommendations || [];
-  recommendationsEl.innerHTML = recs.map((r) => `<li>${r}</li>`).join("");
+  creatorBriefBodyEl.innerHTML = `
+    <article class="brief-block"><div class="brief-block-body"><p>${escapeHtml(legacySummary)}</p></div></article>
+    ${recs.length ? `<ul class="brief-legacy-recs">${recs.map((r) => `<li>${escapeHtml(r)}</li>`).join("")}</ul>` : ""}
+  `;
 }
 
 function renderDashboard(payload) {
@@ -411,7 +475,7 @@ function renderDashboard(payload) {
   renderSentiment(analysis.comment_sentiment || {});
   renderSponsor(analysis.sponsorship || {});
   renderTopVideos(analysis.top_videos || []);
-  renderCreatorBrief(payload.final_response || {});
+  renderCreatorBrief(payload.final_response || {}, payload.query);
 
   dashboardEl.classList.remove("hidden");
 }

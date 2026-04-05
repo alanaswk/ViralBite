@@ -2,7 +2,7 @@ import json
 import os
 from typing import Any, Dict, List
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from langchain_google_vertexai import ChatVertexAI
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 
@@ -16,8 +16,28 @@ def _chat_model_name() -> str:
 
 
 class CreatorBrief(BaseModel):
-    summary: str
-    recommendations: List[str]
+    opportunity_statement: str = Field(
+        description=(
+            "1–2 sentences: why this topic is worth a video now, combining upload trend and engagement. "
+            "Name the type of opportunity (e.g. growing but not saturated vs unmet demand)."
+        )
+    )
+    video_concept: str = Field(
+        description=(
+            "One concrete, filmable idea: working title + premise + structure. Not a generic category."
+        )
+    )
+    production_brief: str = Field(
+        description=(
+            "Tactical production guidance as short paragraphs and/or lines starting with '- ' for bullets. "
+            "Cover ideal length range, title/thumbnail/hook/sponsor/comment cues when data supports it."
+        )
+    )
+    differentiation_angle: str = Field(
+        description=(
+            "What is saturated in top titles and one specific twist or white-space angle to stand out."
+        )
+    )
 
 
 class CommentThemeOutput(BaseModel):
@@ -25,42 +45,69 @@ class CommentThemeOutput(BaseModel):
 
 
 def _fallback_creator_brief(analysis: Dict[str, Any]) -> Dict[str, Any]:
+    topic = analysis.get("topic") or "this topic"
     summary = analysis.get("summary", {})
     sponsorship = analysis.get("sponsorship", {})
     duration = analysis.get("duration_patterns", [])
     keywords = analysis.get("keyword_patterns", [])
+    upload_trend = analysis.get("upload_trend", {})
+    confidence = analysis.get("brief_confidence", {})
+    top_videos = analysis.get("top_videos", [])[:5]
 
+    n = int(summary.get("num_videos", 0) or 0)
+    avg_eng = float(summary.get("avg_engagement_rate", 0) or 0)
     best_duration = max(duration, key=lambda x: x.get("avg_engagement_rate", 0.0), default={})
     best_keyword = max(keywords, key=lambda x: x.get("avg_engagement_rate", 0.0), default={})
 
-    recommendations = [
-        (
-            f"Use a comparison format with clear ranking verdicts around the "
-            f"{best_duration.get('duration_bucket', '3-10m')} range."
-        ),
-        (
-            f"Include high-signal language like '{best_keyword.get('keyword', 'best')}' "
-            f"in the title and early hook."
-        ),
-    ]
+    pct = upload_trend.get("pct_change_vs_prior_half")
+    trend_note = (
+        f"Upload pace in the recent half of the window is about {pct}% vs the prior half."
+        if pct is not None
+        else "Upload trend is flat or not computable from the weekly buckets."
+    )
 
+    opp = (
+        f"Across {n} long-form videos on “{topic}”, average engagement is about {avg_eng:.4f}. "
+        f"{trend_note} "
+        f"The strongest duration bucket in this sample is {best_duration.get('duration_bucket', '1-3m')} "
+        f"by engagement rate — use that as a starting length range."
+    )
+
+    titles_preview = ", ".join(
+        (v.get("title") or "")[:48] for v in top_videos[:3] if v.get("title")
+    ) or "top titles in the sample"
+
+    concept = (
+        f"Pilot: “I ranked {topic} spots by [one specific criterion] — here is the honest order.” "
+        f"Build a clear arc (intro hook → locations → verdict). Inspired by patterns in: {titles_preview}."
+    )
+
+    bucket = best_duration.get("duration_bucket", "1-3m")
+    prod_lines = [
+        f"- Start from the {bucket} duration bucket (strongest avg engagement in this sample of {n} videos); adjust for your format.",
+        f"- Test titles using the keyword “{best_keyword.get('keyword', 'best')}” if it fits your angle.",
+    ]
     if sponsorship.get("sponsored_avg_views", 0) > sponsorship.get("organic_avg_views", 0):
-        recommendations.append(
-            "If using a sponsor, place the ad read after early value delivery (roughly mid-video)."
+        prod_lines.append(
+            "- Sponsored videos in the sample tend to have higher average views; keep the ad read after early value."
         )
     else:
-        recommendations.append(
-            "Prioritize an organic-feeling story arc and keep sponsor language minimal in the title."
+        prod_lines.append(
+            "- Organic-style storytelling is competitive here; avoid heavy sponsor language in the title."
         )
+    if confidence.get("message"):
+        prod_lines.append(f"- Note: {confidence['message']}")
+
+    diff = (
+        f"If many top titles repeat “best” or generic rankings, differentiate with a constraint, "
+        f"a format flip, or a POV flip (tourist vs local) — pick one and commit."
+    )
 
     return {
-        "summary": (
-            f"Comparison and ranking formats are the strongest pattern across this sample of "
-            f"{summary.get('num_videos', 0)} videos. The best-performing length bucket is "
-            f"{best_duration.get('duration_bucket', '3-10m')}, and high-engagement videos often "
-            f"use keywords like '{best_keyword.get('keyword', 'best')}'."
-        ),
-        "recommendations": recommendations[:4],
+        "opportunity_statement": opp,
+        "video_concept": concept,
+        "production_brief": "\n".join(prod_lines),
+        "differentiation_angle": diff,
     }
 
 
@@ -77,34 +124,25 @@ def generate_creator_brief(analysis: Dict[str, Any]) -> Dict[str, Any]:
         )
         structured_llm = llm.with_structured_output(CreatorBrief)
 
-        prompt = f"""
-You are a YouTube food content strategist writing creator briefs.
+        system_instructions = """You are a YouTube content strategist who has studied thousands of food and creator videos. You think like a creative director, not an analyst. Your job is to give ONE creator ONE clear direction they could film tomorrow — not a vague report.
 
-Return JSON with this exact schema:
-- summary: string
-- recommendations: string[] (exactly 4 items)
+Ground everything in the ANALYSIS_JSON. Never give generic YouTube advice. Every sentence in your output must tie to a specific number, label, title pattern, keyword, sentiment theme, or trend from the data. If something is not in the data, say what is missing instead of guessing.
 
-Style and structure requirements:
-1) Summary should read like a confident analyst paragraph, 3-4 sentences.
-2) Mention: dominant format pattern, ideal length range, sponsored vs organic nuance, and strong keywords.
-3) Recommendations must be specific and tactical (title framing, structure, duration, sponsor placement, opening hook).
-4) Ground claims in the numbers from analysis; do not invent metrics.
+High-performing food content often uses: ranking/tier lists, price comparisons, “hidden gem” framing, first-person challenges, or reactions to viral dishes — use these only when they match what appears in the top titles or comments for THIS topic.
 
-Few-shot style example (for tone only):
-Summary:
-"Comparison and ranking formats ('I tried every X,' '$A vs $B') are the dominant pattern among top-performing NYC bagel videos. The sweet spot is 8-14 minutes, long enough for multiple locations but short enough to hold attention. Organic, personality-driven content outperforms sponsored posts by engagement rate, but sponsored videos reach wider audiences. Keywords like 'best,' 'hidden,' and 'authentic' consistently appear in high-engagement titles."
+Produce exactly these four fields (plain text; production_brief may use lines starting with "- " for bullets):
+1) opportunity_statement — Why this topic is worth a video now, using upload_trend + engagement + sample size signals.
+2) video_concept — Specific working title + premise + beats (not “make a ranking video”).
+3) production_brief — Tactical: length range from duration buckets/engagement curve signals, title patterns from top videos, hook patience vs avg length, sponsor vs organic stats if present, comment themes as unanswered demand.
+4) differentiation_angle — What is repeated in top titles and one concrete twist (constraint, POV flip, or format flip).
 
-Recommendations:
-- "Title your video like: 'I ranked every famous NYC bagel shop - here is the honest truth.' Use 'best' or 'hidden' in title text."
-- "Aim for 10-14 minutes. Cover 6-8 locations, spend about 90 seconds per location, and give clear verdicts."
-- "Place sponsor read around the 5-minute mark between locations after early value is delivered."
-- "Open with a hook that compares two extremes (cheapest vs most famous) to pull in comparison-content viewers."
+The brief_confidence object is shown separately in the UI — do not repeat its disclaimer verbatim; focus on actionable insight."""
 
-ANALYSIS JSON:
-{json.dumps(analysis)}
-"""
+        human_payload = f"ANALYSIS_JSON:\n{json.dumps(analysis, default=str)}"
 
-        parsed = structured_llm.invoke(prompt)
+        parsed = structured_llm.invoke(
+            [SystemMessage(content=system_instructions), HumanMessage(content=human_payload)]
+        )
         return parsed.model_dump()
     except Exception as e:
         print(f"Vertex AI Error: {e}")

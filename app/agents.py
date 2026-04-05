@@ -8,6 +8,8 @@ from app.analysis_tools import (
     analyze_comment_sentiment,
     analyze_sponsorship,
     analyze_top_videos,
+    summarize_upload_trend,
+    compute_brief_confidence,
 )
 from app.llm_client import generate_creator_brief, extract_comment_themes_llm
 
@@ -58,10 +60,14 @@ def analyst_node(state):
         sentiment["top_negative_themes"] = []
     sentiment.pop("comment_samples", None)
 
+    upload_frequency = analyze_upload_frequency(df)
     analysis = {
+        "topic": state["query"],
         "summary": summarize_dataset(df),
         "duration_patterns": analyze_duration_patterns(df),
-        "upload_frequency": analyze_upload_frequency(df),
+        "upload_frequency": upload_frequency,
+        "upload_trend": summarize_upload_trend(upload_frequency),
+        "brief_confidence": compute_brief_confidence(df),
         "keyword_patterns": analyze_keyword_patterns(
             df,
             [
@@ -106,6 +112,7 @@ def insight_node(state):
     final_response = {
         "summary": analysis["summary"],
         "creator_brief": creator_brief,
+        "brief_confidence": analysis.get("brief_confidence"),
     }
 
     return {"final_response": final_response}

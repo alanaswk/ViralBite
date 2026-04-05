@@ -61,6 +61,7 @@ def videos_to_dataframe(videos: List[Dict[str, Any]]) -> Tuple[pd.DataFrame, Dic
             "title": v.get("title"),
             "description": v.get("description"),
             "channel_title": v.get("channel_title"),
+            "channel_id": v.get("channel_id"),
             "published_at": v.get("published_at"),
             "view_count": view_count,
             "like_count": like_count,
@@ -218,6 +219,104 @@ def analyze_upload_frequency(df: pd.DataFrame) -> List[Dict[str, Any]]:
         {"week": week.strftime("%Y-%m-%d"), "video_count": int(count)}
         for week, count in weekly_counts.items()
     ]
+
+
+def summarize_upload_trend(upload_frequency: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    Compare the newer half of the 8-week window to the older half (upload_frequency is
+    oldest → newest).
+    """
+    if not upload_frequency or len(upload_frequency) < 2:
+        return {
+            "recent_half_total": 0,
+            "prior_half_total": 0,
+            "pct_change_vs_prior_half": None,
+            "interpretation": "insufficient_weekly_history",
+        }
+
+    n = len(upload_frequency)
+    mid = n // 2
+    prior_counts = [int(upload_frequency[i].get("video_count", 0) or 0) for i in range(0, mid)]
+    recent_counts = [int(upload_frequency[i].get("video_count", 0) or 0) for i in range(mid, n)]
+    prior_total = sum(prior_counts)
+    recent_total = sum(recent_counts)
+    pct_change = None
+    if prior_total > 0:
+        pct_change = round((recent_total - prior_total) / prior_total * 100, 1)
+    elif recent_total > 0:
+        pct_change = None
+
+    if pct_change is None:
+        if recent_total == 0 and prior_total == 0:
+            interpretation = "flat"
+        elif prior_total == 0:
+            interpretation = "accelerating_from_zero"
+        else:
+            interpretation = "unknown"
+    elif pct_change >= 15:
+        interpretation = "accelerating"
+    elif pct_change <= -15:
+        interpretation = "cooling"
+    else:
+        interpretation = "steady"
+
+    return {
+        "recent_half_total": recent_total,
+        "prior_half_total": prior_total,
+        "pct_change_vs_prior_half": pct_change,
+        "interpretation": interpretation,
+    }
+
+
+def compute_brief_confidence(df: pd.DataFrame) -> Dict[str, Any]:
+    """
+    Sample-size and channel-concentration signal for how much to trust creator guidance.
+    """
+    if df.empty:
+        return {
+            "level": "none",
+            "message": "",
+            "sample_size": 0,
+            "unique_channels": 0,
+            "top_channel_share_pct": None,
+            "top_two_channel_share_pct": None,
+        }
+
+    n = int(len(df))
+    channel_col = "channel_id" if "channel_id" in df.columns else "channel_title"
+    vc = df[channel_col].fillna("(unknown)").astype(str).value_counts()
+    unique_channels = int(vc.shape[0])
+    top_one = float(vc.iloc[0] / n * 100) if len(vc) else 0.0
+    top_two = float(vc.head(2).sum() / n * 100) if len(vc) else 0.0
+
+    small_sample = n < 25
+    concentrated = n >= 10 and top_two >= 55
+    if small_sample and concentrated:
+        message = (
+            "Small sample and many top results are from a few channels — "
+            "treat recommendations as directional, not definitive."
+        )
+        level = "low"
+    elif small_sample:
+        message = "Based on a small sample — treat recommendations as directional, not definitive."
+        level = "low"
+    elif concentrated:
+        message = (
+            "Many top videos are from a few channels; patterns may reflect those creators, not the whole niche."
+        )
+        level = "medium"
+    else:
+        message = ""
+        level = "high" if n >= 30 and top_two < 45 else "medium"
+
+    return {
+        "level": level,
+        "message": message,
+        "sample_size": n,
+        "unique_channels": unique_channels,
+        "top_channel_share_pct": round(top_one, 1),
+        "top_two_channel_share_pct": round(top_two, 1),
+    }
 
 
 _STOPWORDS = {

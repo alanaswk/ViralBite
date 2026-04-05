@@ -3,8 +3,7 @@ def format_report(query: str, analysis: dict, final_response: dict | None = None
     duration_patterns = analysis.get("duration_patterns", [])
     keyword_patterns = analysis.get("keyword_patterns", [])
     creator_brief = (final_response or {}).get("creator_brief", {})
-    brief_summary = creator_brief.get("summary", "No creator brief generated.")
-    recommendations = creator_brief.get("recommendations", [])
+    brief_confidence = (final_response or {}).get("brief_confidence") or analysis.get("brief_confidence") or {}
 
     top_duration = None
     if duration_patterns:
@@ -38,11 +37,16 @@ def format_report(query: str, analysis: dict, final_response: dict | None = None
         lines.append(f"- Matching videos: {top_keyword.get('video_count', 0)}")
 
     lines.append("\nCREATOR BRIEF")
-    lines.append(f"- {brief_summary}")
-
-    if recommendations:
-        lines.append("\nACTION RECOMMENDATIONS")
-        for item in recommendations:
+    if brief_confidence.get("message"):
+        lines.append(f"- Confidence: {brief_confidence.get('message')}")
+    if creator_brief.get("opportunity_statement"):
+        lines.append(f"- Opportunity: {creator_brief.get('opportunity_statement')}")
+        lines.append(f"- Video concept: {creator_brief.get('video_concept')}")
+        lines.append(f"- Production brief: {creator_brief.get('production_brief')}")
+        lines.append(f"- Differentiation: {creator_brief.get('differentiation_angle')}")
+    else:
+        lines.append(f"- {creator_brief.get('summary', 'No creator brief generated.')}")
+        for item in creator_brief.get("recommendations") or []:
             lines.append(f"- {item}")
 
     if top_duration or top_keyword:
