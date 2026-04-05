@@ -1,10 +1,17 @@
+import os
 import re
 from collections import Counter
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Tuple
 
 import matplotlib.pyplot as plt
 import pandas as pd
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+
+def _min_duration_threshold() -> int:
+    try:
+        return max(0, int(os.getenv("VIRALBITE_MIN_DURATION_SECONDS", "60")))
+    except ValueError:
+        return 60
 
 
 def iso8601_duration_to_seconds(duration: str) -> int:
@@ -27,9 +34,12 @@ def iso8601_duration_to_seconds(duration: str) -> int:
     return hours * 3600 + minutes * 60 + seconds
 
 
-def videos_to_dataframe(videos: List[Dict[str, Any]]) -> pd.DataFrame:
+def videos_to_dataframe(videos: List[Dict[str, Any]]) -> Tuple[pd.DataFrame, Dict[str, Any]]:
     """
     Flatten raw YouTube video records into a pandas DataFrame.
+
+    Drops videos with duration <= VIRALBITE_MIN_DURATION_SECONDS (default 60s), so analysis
+    is long-form only (excludes typical Shorts and sub-1-minute clips).
     """
     rows = []
 
@@ -64,8 +74,25 @@ def videos_to_dataframe(videos: List[Dict[str, Any]]) -> pd.DataFrame:
 
     df = pd.DataFrame(rows)
 
+    fetched = int(len(df))
+    threshold = _min_duration_threshold()
+    filter_meta: Dict[str, Any] = {
+        "videos_fetched": fetched,
+        "min_duration_seconds_threshold": threshold,
+        "excluded_not_longer_than_threshold": 0,
+        "videos_analyzed": 0,
+    }
+
     if df.empty:
-        return df
+        return df, filter_meta
+
+    before = len(df)
+    df = df[df["duration_seconds"] > threshold].reset_index(drop=True)
+    filter_meta["excluded_not_longer_than_threshold"] = before - len(df)
+    filter_meta["videos_analyzed"] = int(len(df))
+
+    if df.empty:
+        return df, filter_meta
 
     df["like_rate"] = df.apply(
         lambda row: row["like_count"] / row["view_count"] if row["view_count"] > 0 else 0,
@@ -86,7 +113,7 @@ def videos_to_dataframe(videos: List[Dict[str, Any]]) -> pd.DataFrame:
         include_lowest=True
     )
 
-    return df
+    return df, filter_meta
 
 
 def summarize_dataset(df: pd.DataFrame) -> Dict[str, Any]:

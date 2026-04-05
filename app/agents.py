@@ -49,7 +49,7 @@ def collector_node(state):
 def analyst_node(state):
     videos = state["videos"]
     collection_meta = state.get("collection_meta", {})
-    df = videos_to_dataframe(videos)
+    df, duration_filter = videos_to_dataframe(videos)
 
     sentiment = analyze_comment_sentiment(df)
     llm_themes = extract_comment_themes_llm(sentiment.get("comment_samples", []))
@@ -78,6 +78,11 @@ def analyst_node(state):
             "window_days": collection_meta.get("window_days"),
             "order": collection_meta.get("order", "viewCount"),
             "fetched_videos": collection_meta.get("fetched_videos", len(videos)),
+            "videos_analyzed": duration_filter.get("videos_analyzed", len(df)),
+            "min_duration_seconds_threshold": duration_filter.get("min_duration_seconds_threshold"),
+            "excluded_not_longer_than_threshold": duration_filter.get(
+                "excluded_not_longer_than_threshold", 0
+            ),
             "videos_with_comments": collection_meta.get("videos_with_comments", 0),
             "videos_with_transcript": collection_meta.get("videos_with_transcript", 0),
             "comment_policy": (

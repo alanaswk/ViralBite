@@ -95,10 +95,13 @@ function renderOverview(summary, sampleDefinition) {
 
   const days = sampleDefinition?.window_days ?? DEFAULT_ANALYZE_PARAMS.days;
   const order = sampleDefinition?.order || DEFAULT_ANALYZE_PARAMS.order;
-  const count = sampleDefinition?.fetched_videos ?? summary.num_videos ?? 0;
+  const fetched = sampleDefinition?.fetched_videos ?? summary.num_videos ?? 0;
+  const analyzed = sampleDefinition?.videos_analyzed ?? summary.num_videos ?? 0;
+  const excluded = sampleDefinition?.excluded_not_longer_than_threshold ?? 0;
+  const threshold = sampleDefinition?.min_duration_seconds_threshold ?? 60;
   const transcriptCount = sampleDefinition?.videos_with_transcript ?? 0;
   sampleDefinitionEl.textContent =
-    `Based on ${fmt(count, 0)} videos from the last ${days} days (order: ${order}). Transcript text available for ${fmt(transcriptCount, 0)} videos.`;
+    `Fetched ${fmt(fetched, 0)} videos; analysis uses ${fmt(analyzed, 0)} with duration > ${threshold}s (${fmt(excluded, 0)} ≤${threshold}s excluded). Last ${days} days, order: ${order}. Transcripts: ${fmt(transcriptCount, 0)} videos.`;
 }
 
 function renderDurationChart(patterns) {

@@ -23,6 +23,7 @@ Set environment variables:
 - `VIRALBITE_ENABLE_TRANSCRIPTS` (optional, defaults to `1`)
 - `VIRALBITE_TRANSCRIPT_WORKERS` (optional, defaults to `4`)
 - `VIRALBITE_MAX_TRANSCRIPT_VIDEOS` (optional, defaults to `8`)
+- `VIRALBITE_MIN_DURATION_SECONDS` (optional, defaults to `60`) — analysis includes only videos with **duration strictly greater** than this value (seconds), so the default excludes Shorts and clips ≤1 minute
 
 ## Analyze defaults and tuning
 

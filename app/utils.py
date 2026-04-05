@@ -19,6 +19,10 @@ def run_topic_analysis(
     max_pages: int = 2,
     max_comments_per_video: int = 10,
 ) -> dict:
+    try:
+        min_dur = int(os.getenv("VIRALBITE_MIN_DURATION_SECONDS", "60"))
+    except ValueError:
+        min_dur = 60
     cache_key = (
         query.strip().lower(),
         int(window_days),
@@ -26,6 +30,7 @@ def run_topic_analysis(
         order,
         int(max_pages),
         int(max_comments_per_video),
+        min_dur,
     )
     now = time.time()
     with _CACHE_LOCK:

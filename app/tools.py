@@ -28,7 +28,7 @@ def analyze_youtube_tool(videos_json: str) -> str:
     """Analyze collected YouTube video data from a JSON string and return analysis as JSON."""
     videos = json.loads(videos_json)
 
-    df = videos_to_dataframe(videos)
+    df, _duration_filter = videos_to_dataframe(videos)
 
     analysis = {
         "summary": summarize_dataset(df),
