@@ -1,277 +1,294 @@
-const loadHomepageBtn = document.getElementById("load-homepage-btn");
+const weeklyTopicsEl = document.getElementById("weekly-topics");
+const dailyTopicsEl = document.getElementById("daily-topics");
+const topicInput = document.getElementById("topic-input");
 const analyzeBtn = document.getElementById("analyze-btn");
-const queryInput = document.getElementById("query-input");
-const cardsDiv = document.getElementById("cards");
-const reportOutput = document.getElementById("report-output");
-const loadingDiv = document.getElementById("loading");
+const loadingEl = document.getElementById("loading");
+const dashboardEl = document.getElementById("dashboard");
+const overviewCardsEl = document.getElementById("overview-cards");
+const keywordSignalsEl = document.getElementById("keyword-signals");
+const sentimentBarEl = document.getElementById("sentiment-bar");
+const sentimentMetaEl = document.getElementById("sentiment-meta");
+const sponsorMetaEl = document.getElementById("sponsor-meta");
+const topVideosBodyEl = document.querySelector("#top-videos-table tbody");
+const nlpSummaryEl = document.getElementById("nlp-summary");
+const recommendationsEl = document.getElementById("recommendations");
+const chatMessagesEl = document.getElementById("chat-messages");
+const chatInputEl = document.getElementById("chat-input");
+const chatSendBtn = document.getElementById("chat-send-btn");
 
-function formatMetric(value, digits = 2) {
-  if (value === null || value === undefined || value === "N/A") return "N/A";
+let durationChart = null;
+let uploadChart = null;
+let sponsorChart = null;
+let latestAnalysis = null;
+let latestTopic = "";
+let chatHistory = [];
+
+function fmt(value, digits = 2) {
+  if (value === null || value === undefined) return "N/A";
   if (typeof value === "number") {
-    return value.toLocaleString(undefined, {
-      maximumFractionDigits: digits,
-    });
+    return value.toLocaleString(undefined, { maximumFractionDigits: digits });
   }
   return value;
 }
 
-function renderHomepageCards(data) {
-  cardsDiv.innerHTML = "";
+function toMinutes(seconds) {
+  if (!seconds && seconds !== 0) return "N/A";
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${mins}m ${secs}s`;
+}
 
-  const items = Array.isArray(data) ? data : (data.topics || data.cards || []);
-  if (!items.length) {
-    cardsDiv.innerHTML = `<p class="empty-state">No homepage data returned.</p>`;
+function renderTopicButtons(target, topics) {
+  target.innerHTML = "";
+  topics.forEach((entry) => {
+    const topic = entry.topic || entry;
+    const btn = document.createElement("button");
+    btn.className = "topic-pill";
+    btn.textContent = topic;
+    btn.addEventListener("click", () => {
+      topicInput.value = topic;
+      runAnalysis(topic);
+    });
+    target.appendChild(btn);
+  });
+}
+
+async function loadHomepageTopics() {
+  const response = await fetch("/homepage");
+  const data = await response.json();
+  renderTopicButtons(weeklyTopicsEl, data.weekly || []);
+  renderTopicButtons(dailyTopicsEl, data.daily || []);
+}
+
+function renderOverview(summary) {
+  const cards = [
+    { label: "Total views", value: fmt(summary.total_views || 0, 0), note: `across ${fmt(summary.num_videos || 0, 0)} videos` },
+    { label: "Avg engagement rate", value: `${fmt((summary.avg_engagement_rate || 0) * 100, 2)}%`, note: "likes + comments / views" },
+    { label: "Median view count", value: fmt(summary.median_views || 0, 0), note: "less skewed than average" },
+    { label: "Dominant video length", value: summary.dominant_duration_bucket || "N/A", note: `avg length ${toMinutes(Math.round(summary.avg_duration_seconds || 0))}` },
+  ];
+
+  overviewCardsEl.innerHTML = cards
+    .map(
+      (card) => `
+      <div class="metric-card">
+        <div class="metric-label">${card.label}</div>
+        <div class="metric-value">${card.value}</div>
+        <div class="metric-note">${card.note}</div>
+      </div>`
+    )
+    .join("");
+}
+
+function renderDurationChart(patterns) {
+  const ctx = document.getElementById("durationChart");
+  if (durationChart) durationChart.destroy();
+
+  durationChart = new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels: patterns.map((p) => p.duration_bucket),
+      datasets: [
+        {
+          label: "Avg engagement rate",
+          data: patterns.map((p) => (p.avg_engagement_rate || 0) * 100),
+          backgroundColor: "rgba(86, 156, 246, 0.75)",
+          borderRadius: 8,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { ticks: { callback: (v) => `${v}%` } },
+      },
+    },
+  });
+}
+
+function renderUploadChart(uploadFrequency) {
+  const ctx = document.getElementById("uploadChart");
+  if (uploadChart) uploadChart.destroy();
+
+  uploadChart = new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels: uploadFrequency.map((x) => x.week),
+      datasets: [
+        {
+          label: "Videos published",
+          data: uploadFrequency.map((x) => x.video_count),
+          backgroundColor: "rgba(43, 116, 188, 0.8)",
+          borderRadius: 8,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false } },
+    },
+  });
+}
+
+function renderKeywordSignals(keywords) {
+  keywordSignalsEl.innerHTML = "";
+  if (!keywords.length) {
+    keywordSignalsEl.innerHTML = `<p class="muted">No keyword data available.</p>`;
     return;
   }
 
-  items.forEach((item) => {
-    const card = document.createElement("div");
-    card.className = "card";
-
-    const avgEngagement =
-      item.avg_engagement_rate ??
-      item.avg_engagement ??
-      "N/A";
-
-    const topDuration =
-      item.top_duration_bucket ??
-      item.duration_bucket ??
-      "N/A";
-
-    const topKeyword =
-      item.top_keyword ??
-      item.keyword ??
-      item.strongest_keyword_signal ??
-      "N/A";
-
-    card.innerHTML = `
-      <h3>${item.topic || "Topic"}</h3>
-      <div class="metric">
-        <strong>Average engagement</strong>
-        <div class="metric-value">${formatMetric(avgEngagement, 4)}</div>
-      </div>
-      <div class="metric">
-        <strong>Top duration bucket</strong>
-        <div class="metric-value">${topDuration}</div>
-      </div>
-      <div class="metric">
-        <strong>Strongest keyword signal</strong>
-        <div class="metric-value">${topKeyword}</div>
-      </div>
-    `;
-
-    cardsDiv.appendChild(card);
-  });
+  keywords
+    .sort((a, b) => (b.avg_engagement_rate || 0) - (a.avg_engagement_rate || 0))
+    .forEach((row) => {
+      const chip = document.createElement("div");
+      chip.className = "keyword-chip";
+      chip.innerHTML = `<strong>${row.keyword}</strong><span>${fmt((row.avg_engagement_rate || 0) * 100, 2)}% eng · ${row.video_count} videos</span>`;
+      keywordSignalsEl.appendChild(chip);
+    });
 }
 
-async function loadHomepage() {
-  cardsDiv.innerHTML = `<p class="empty-state">Loading dashboard...</p>`;
+function renderSentiment(sentiment) {
+  const positive = sentiment.positive_pct || 0;
+  const neutral = sentiment.neutral_pct || 0;
+  const negative = sentiment.negative_pct || 0;
 
-  try {
-    const res = await fetch("/homepage");
-    const data = await res.json();
-    renderHomepageCards(data);
-  } catch (err) {
-    cardsDiv.innerHTML = `<p class="empty-state">Failed to load homepage data.</p>`;
-    console.error(err);
-  }
+  sentimentBarEl.innerHTML = `
+    <div class="seg positive" style="width:${positive}%">${fmt(positive, 0)}%</div>
+    <div class="seg neutral" style="width:${neutral}%">${fmt(neutral, 0)}%</div>
+    <div class="seg negative" style="width:${negative}%">${fmt(negative, 0)}%</div>
+  `;
+
+  const posThemes = (sentiment.top_positive_themes || []).join(", ") || "n/a";
+  const negThemes = (sentiment.top_negative_themes || []).join(", ") || "n/a";
+  sentimentMetaEl.textContent = `Analyzed ${sentiment.num_comments_analyzed || 0} comments · Positive themes: ${posThemes} · Negative themes: ${negThemes}`;
 }
 
-function extractReportSections(data) {
-  const analysis = data.analysis || {};
-  const summary = analysis.summary || {};
-  const hypothesis = analysis.hypothesis || {};
+function renderSponsor(sponsorship) {
+  const ctx = document.getElementById("sponsorChart");
+  if (sponsorChart) sponsorChart.destroy();
 
-  const durationPatterns = analysis.duration_patterns || [];
-  const keywordPatterns = analysis.keyword_patterns || [];
-
-  const bestDuration = durationPatterns[0] || {};
-  const bestKeyword = keywordPatterns[0] || {};
-
-  const recommendation =
-    analysis.recommendation ||
-    `For this topic, creators should lean into ${bestDuration.duration_bucket || "high-performing formats"} and keyword framing around '${bestKeyword.keyword || "top-performing language"}'.`;
-
-  return {
-    overview: [
-      `Videos analyzed: ${formatMetric(summary.num_videos, 0)}`,
-      `Average views: ${formatMetric(summary.avg_views, 1)}`,
-      `Median views: ${formatMetric(summary.median_views, 1)}`,
-      `Average engagement rate: ${formatMetric(summary.avg_engagement_rate, 4)}`,
-    ],
-    formatSignal: [
-      `Best duration bucket: ${bestDuration.duration_bucket || "N/A"}`,
-      `Average engagement in that bucket: ${formatMetric(bestDuration.avg_engagement_rate, 4)}`,
-    ],
-    keywordSignal: [
-      `Strongest keyword: ${bestKeyword.keyword || "N/A"}`,
-      `Average engagement rate: ${formatMetric(bestKeyword.avg_engagement_rate, 4)}`,
-      `Matching videos: ${formatMetric(bestKeyword.video_count, 0)}`,
-    ],
-    hypothesis: hypothesis.hypothesis || "No hypothesis returned.",
-    evidence: hypothesis.supporting_evidence || [],
-    caveats: hypothesis.caveats || [],
-    recommendation: recommendation,
-  };
-}
-
-function renderReport(data) {
-  const sections = extractReportSections(data);
-
-  const summaryCards = `
-  <div class="mini-stats">
-    <div class="mini-stat">
-      <span>Videos</span>
-      <strong>${formatMetric((data.analysis || {}).summary?.num_videos, 0)}</strong>
-    </div>
-    <div class="mini-stat">
-      <span>Avg Views</span>
-      <strong>${formatMetric((data.analysis || {}).summary?.avg_views, 0)}</strong>
-    </div>
-    <div class="mini-stat">
-      <span>Engagement</span>
-      <strong>${formatMetric((data.analysis || {}).summary?.avg_engagement_rate, 4)}</strong>
-    </div>
-  </div>
-`;
-
-  reportOutput.innerHTML = `
-    ${summaryCards}
-
-    <div class="report-block">
-        <div class="report-section highlight">
-        <h3>Hypothesis</h3>
-        <p>${sections.hypothesis}</p>
-        </div>
-
-        <div class="report-section takeaway strong-takeaway">
-        <h3>Creator Takeaway</h3>
-        <p>${sections.recommendation}</p>
-        </div>
-
-        <div class="report-section">
-        <h3>Supporting Evidence</h3>
-        <ul>${sections.evidence.map(item => `<li>${item}</li>`).join("")}</ul>
-        </div>
-
-        <div class="report-section">
-        <h3>Overview</h3>
-        <ul>${sections.overview.map(item => `<li>${item}</li>`).join("")}</ul>
-        </div>
-
-        <div class="report-section">
-        <h3>Top Format Signal</h3>
-        <ul>${sections.formatSignal.map(item => `<li>${item}</li>`).join("")}</ul>
-        </div>
-
-        <div class="report-section">
-        <h3>Top Keyword Signal</h3>
-        <ul>${sections.keywordSignal.map(item => `<li>${item}</li>`).join("")}</ul>
-        </div>
-
-        <div class="report-section">
-        <h3>Caveats</h3>
-        <ul>${sections.caveats.map(item => `<li>${item}</li>`).join("")}</ul>
-        </div>
-    </div>
-    `;
-}
-
-let chartInstance = null;
-
-function renderChart(data) {
-  const ctx = document.getElementById("durationChart");
-
-  const patterns = data.analysis?.duration_patterns || [];
-
-  const labels = patterns.map(p => p.duration_bucket);
-  const values = patterns.map(p => p.avg_engagement_rate);
-
-  if (chartInstance) {
-    chartInstance.destroy();
-  }
-
-  chartInstance = new Chart(ctx, {
-    type: "bar",
+  sponsorChart = new Chart(ctx, {
+    type: "doughnut",
     data: {
-      labels: labels,
-      datasets: [{
-        label: "Avg Engagement Rate",
-        data: values,
-      }]
+      labels: ["Sponsored", "Organic"],
+      datasets: [
+        {
+          data: [sponsorship.sponsored_count || 0, sponsorship.organic_count || 0],
+          backgroundColor: ["rgba(73, 131, 197, 0.9)", "rgba(165, 198, 233, 0.9)"],
+        },
+      ],
     },
     options: {
-        responsive: true,
-        plugins: {
-            legend: { display: false },
-            title: {
-            display: true,
-            text: "Engagement Rate by Video Length",
-            font: {
-                size: 16
-            }
-            }
-        },
-        scales: {
-            x: {
-            title: {
-                display: true,
-                text: "Video Duration"
-            }
-            },
-            y: {
-            title: {
-                display: true,
-                text: "Engagement Rate"
-            }
-            }
-        }
-        }
+      responsive: true,
+    },
+  });
+
+  sponsorMetaEl.textContent =
+    `Sponsored avg views: ${fmt(sponsorship.sponsored_avg_views || 0, 0)} | ` +
+    `Organic avg views: ${fmt(sponsorship.organic_avg_views || 0, 0)} | ` +
+    `Sponsored eng: ${fmt((sponsorship.sponsored_avg_engagement || 0) * 100, 2)}% | ` +
+    `Organic eng: ${fmt((sponsorship.organic_avg_engagement || 0) * 100, 2)}%`;
+}
+
+function renderTopVideos(videos) {
+  topVideosBodyEl.innerHTML = "";
+  videos.forEach((video, idx) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${idx + 1}</td>
+      <td><strong>${video.title || "Untitled"}</strong><div class="muted">${video.channel_title || ""}</div></td>
+      <td>${fmt(video.view_count || 0, 0)}</td>
+      <td>${fmt((video.engagement_rate || 0) * 100, 2)}%</td>
+      <td>${toMinutes(video.duration_seconds || 0)}</td>
+    `;
+    topVideosBodyEl.appendChild(tr);
   });
 }
 
-async function runAnalysis(query) {
+function addChatMessage(role, content) {
+  const bubble = document.createElement("div");
+  bubble.className = `chat-bubble ${role}`;
+  bubble.textContent = content;
+  chatMessagesEl.appendChild(bubble);
+  chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+}
+
+async function sendChat() {
+  const message = chatInputEl.value.trim();
+  if (!message || !latestAnalysis || !latestTopic) return;
+
+  addChatMessage("user", message);
+  chatHistory.push({ role: "user", content: message });
+  chatInputEl.value = "";
+
+  const response = await fetch("/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      topic: latestTopic,
+      analysis: latestAnalysis,
+      history: chatHistory,
+      message,
+    }),
+  });
+
+  const payload = await response.json();
+  const text = payload.response || "No response.";
+  addChatMessage("assistant", text);
+  chatHistory.push({ role: "assistant", content: text });
+}
+
+function renderCreatorBrief(finalResponse) {
+  const brief = finalResponse?.creator_brief || {};
+  nlpSummaryEl.textContent = brief.summary || "No creator summary generated.";
+  const recs = brief.recommendations || [];
+  recommendationsEl.innerHTML = recs.map((r) => `<li>${r}</li>`).join("");
+}
+
+function renderDashboard(payload) {
+  const analysis = payload.analysis || {};
+  latestAnalysis = analysis;
+  latestTopic = payload.query || topicInput.value.trim();
+  chatHistory = [];
+  chatMessagesEl.innerHTML = "";
+  addChatMessage("assistant", `Loaded context for "${latestTopic}". Ask me anything about the dashboard.`);
+
+  renderOverview(analysis.summary || {});
+  renderDurationChart(analysis.duration_patterns || []);
+  renderUploadChart(analysis.upload_frequency || []);
+  renderKeywordSignals(analysis.keyword_patterns || []);
+  renderSentiment(analysis.comment_sentiment || {});
+  renderSponsor(analysis.sponsorship || {});
+  renderTopVideos(analysis.top_videos || []);
+  renderCreatorBrief(payload.final_response || {});
+
+  dashboardEl.classList.remove("hidden");
+}
+
+async function runAnalysis(topic) {
+  const query = topic?.trim();
   if (!query) return;
-
-  loadingDiv.classList.remove("hidden");
-  reportOutput.innerHTML = `<p class="empty-state">Running analysis...</p>`;
-
+  loadingEl.classList.remove("hidden");
   try {
-    const res = await fetch(`/analyze?query=${encodeURIComponent(query)}`);
-    console.log("RUNNING QUERY:", query);
-    const data = await res.json();
-    console.log("ANALYZE DATA:", data);
-
-    renderReport(data);
-    renderChart(data);
-
-  } catch (err) {
-    reportOutput.innerHTML = `<p class="empty-state">Analysis failed.</p>`;
-    console.error(err);
+    const response = await fetch(`/analyze?query=${encodeURIComponent(query)}`);
+    const data = await response.json();
+    renderDashboard(data);
+  } catch (error) {
+    console.error(error);
+    alert("Analysis failed. Check your API keys and try again.");
   } finally {
-    loadingDiv.classList.add("hidden");
+    loadingEl.classList.add("hidden");
   }
 }
 
-loadHomepageBtn.addEventListener("click", loadHomepage);
-
-analyzeBtn.addEventListener("click", () => {
-  runAnalysis(queryInput.value.trim());
+analyzeBtn.addEventListener("click", () => runAnalysis(topicInput.value));
+topicInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") runAnalysis(topicInput.value);
+});
+chatSendBtn.addEventListener("click", sendChat);
+chatInputEl.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") sendChat();
 });
 
-queryInput.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") {
-    runAnalysis(queryInput.value.trim());
-  }
-});
-
-document.querySelectorAll(".topic-btn").forEach((btn) => {
-  btn.addEventListener("click", () => {
-    const topic = btn.textContent.trim();
-    queryInput.value = topic;
-    runAnalysis(topic);
-  });
-});
-
-
-loadHomepage();
+loadHomepageTopics();

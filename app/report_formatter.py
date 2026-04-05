@@ -1,12 +1,10 @@
-def format_report(query: str, analysis: dict) -> str:
+def format_report(query: str, analysis: dict, final_response: dict | None = None) -> str:
     summary = analysis.get("summary", {})
     duration_patterns = analysis.get("duration_patterns", [])
     keyword_patterns = analysis.get("keyword_patterns", [])
-    hypothesis_block = analysis.get("hypothesis", {})
-
-    hypothesis = hypothesis_block.get("hypothesis", "No hypothesis generated.")
-    evidence = hypothesis_block.get("supporting_evidence", [])
-    caveats = hypothesis_block.get("caveats", [])
+    creator_brief = (final_response or {}).get("creator_brief", {})
+    brief_summary = creator_brief.get("summary", "No creator brief generated.")
+    recommendations = creator_brief.get("recommendations", [])
 
     top_duration = None
     if duration_patterns:
@@ -39,17 +37,12 @@ def format_report(query: str, analysis: dict) -> str:
         lines.append(f"- Avg engagement rate: {round(top_keyword.get('avg_engagement_rate', 0), 4)}")
         lines.append(f"- Matching videos: {top_keyword.get('video_count', 0)}")
 
-    lines.append("\nHYPOTHESIS")
-    lines.append(f"- {hypothesis}")
+    lines.append("\nCREATOR BRIEF")
+    lines.append(f"- {brief_summary}")
 
-    if evidence:
-        lines.append("\nSUPPORTING EVIDENCE")
-        for item in evidence:
-            lines.append(f"- {item}")
-
-    if caveats:
-        lines.append("\nCAVEATS")
-        for item in caveats:
+    if recommendations:
+        lines.append("\nACTION RECOMMENDATIONS")
+        for item in recommendations:
             lines.append(f"- {item}")
 
     if top_duration or top_keyword:

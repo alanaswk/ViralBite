@@ -4,3 +4,10 @@ langchain-core
 pydantic
 fastapi
 uvicorn
+pandas
+matplotlib
+python-dotenv
+google-api-python-client
+openai
+vaderSentiment
+jinja2

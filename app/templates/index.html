@@ -9,69 +9,123 @@
 </head>
 <body>
   <header class="hero">
-    <div class="hero-content">
-      <div>
-        <p class="eyebrow">Agentic creator analytics</p>
-        <h1>ViralBite</h1>
-        <p class="hero-subtitle">
-          Creator intelligence for food content on YouTube. Explore what topics
-          are trending, what patterns drive engagement, and what creators should post next.
-        </p>
-      </div>
+    <div class="hero-inner">
+      <p class="eyebrow">creator trend intelligence</p>
+      <h1>ViralBite</h1>
+      <p class="hero-copy">Pick a trending topic, inspect the metrics, and get a data-grounded creator brief plus chat support.</p>
     </div>
   </header>
 
-  <main class="container">
-    <section class="panel">
-      <div class="section-header">
-        <h2>Tracked Topics</h2>
-        <button id="load-homepage-btn" class="primary-btn">Load Dashboard</button>
+  <main class="page">
+    <section class="panel landing">
+      <div class="section-title">
+        <h2>Today's trending topics</h2>
+        <span class="badge">hardcoded demo list</span>
       </div>
-      <div id="cards" class="cards"></div>
+
+      <div class="topic-groups">
+        <div>
+          <h3>This week</h3>
+          <div id="weekly-topics" class="topic-row"></div>
+        </div>
+        <div>
+          <h3>Today</h3>
+          <div id="daily-topics" class="topic-row"></div>
+        </div>
+      </div>
+
+      <div class="custom-topic">
+        <input id="topic-input" type="text" placeholder="Type a custom topic (e.g., nyc bagel)" />
+        <button id="analyze-btn" class="primary-btn">Analyze Topic</button>
+      </div>
     </section>
-
-    <section class="panel">
-      <div class="section-header">
-        <h2>Ask the Analyst</h2>
-      </div>
-
-      <div class="search-row">
-        <input
-          id="query-input"
-          type="text"
-          placeholder="Try: Why are NYC bagel videos trending?"
-        />
-        <button id="analyze-btn" class="primary-btn">Analyze</button>
-      </div>
-
-    <div class="quick-topics">
-    <button class="topic-btn">Why are NYC bagel videos trending?</button>
-    <button class="topic-btn">What format works best for matcha latte videos?</button>
-    <button class="topic-btn">What makes Brooklyn pizza videos perform well?</button>
-    </div>
-    </section>
-
-    <section class="panel">
-    <div class="section-header">
-        <h2>Analyst Report</h2>
-    </div>
 
     <div id="loading" class="loading hidden">Running analysis...</div>
 
-    <div id="report-output" class="report-output">
-        <div class="empty-state">
-        Run an analysis to generate a report.
-        </div>
-    </div>
-    </section>
+    <section id="dashboard" class="hidden">
+      <div class="overview-grid" id="overview-cards"></div>
 
-    <section class="panel">
-    <div class="section-header">
-        <h2>Visual Evidence</h2>
-    </div>
-    <div class="chart-container">
-        <canvas id="durationChart"></canvas>
-    </div>
+      <div class="main-grid">
+        <section class="panel">
+          <div class="section-title">
+            <h2>Engagement by duration</h2>
+          </div>
+          <canvas id="durationChart"></canvas>
+        </section>
+
+        <section class="panel">
+          <div class="section-title">
+            <h2>Upload frequency (last 8 weeks)</h2>
+          </div>
+          <canvas id="uploadChart"></canvas>
+        </section>
+      </div>
+
+      <div class="main-grid">
+        <section class="panel">
+          <div class="section-title">
+            <h2>Keyword signals</h2>
+          </div>
+          <div id="keyword-signals" class="keyword-list"></div>
+        </section>
+
+        <section class="panel">
+          <div class="section-title">
+            <h2>Comment sentiment</h2>
+          </div>
+          <div id="sentiment-bar" class="sentiment-bar"></div>
+          <div id="sentiment-meta" class="muted"></div>
+        </section>
+
+        <section class="panel">
+          <div class="section-title">
+            <h2>Sponsored vs organic</h2>
+          </div>
+          <canvas id="sponsorChart"></canvas>
+          <div id="sponsor-meta" class="muted"></div>
+        </section>
+      </div>
+
+      <section class="panel">
+        <div class="section-title">
+          <h2>Top performing videos</h2>
+        </div>
+        <div class="table-wrap">
+          <table id="top-videos-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Title</th>
+                <th>Views</th>
+                <th>Engagement</th>
+                <th>Length</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <div class="main-grid">
+        <section class="panel">
+          <div class="section-title">
+            <h2>NLP summary</h2>
+          </div>
+          <p id="nlp-summary" class="body-copy"></p>
+          <ul id="recommendations"></ul>
+        </section>
+
+        <section class="panel chat-panel">
+          <div class="section-title">
+            <h2>Ask ViralBite Chat</h2>
+          </div>
+          <div id="chat-messages" class="chat-messages"></div>
+          <div class="chat-input-row">
+            <input id="chat-input" type="text" placeholder="Ask about the graphs or recommendations..." />
+            <button id="chat-send-btn" class="primary-btn">Send</button>
+          </div>
+        </section>
+      </div>
     </section>
   </main>
 

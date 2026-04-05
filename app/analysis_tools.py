@@ -1,8 +1,10 @@
 import re
+from collections import Counter
 from typing import List, Dict, Any
 
-import pandas as pd
 import matplotlib.pyplot as plt
+import pandas as pd
+from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 
 
 def iso8601_duration_to_seconds(duration: str) -> int:
@@ -90,12 +92,19 @@ def summarize_dataset(df: pd.DataFrame) -> Dict[str, Any]:
     if df.empty:
         return {"error": "No videos found."}
 
+    dominant_duration_bucket = None
+    duration_mode = df["duration_bucket"].mode(dropna=True)
+    if not duration_mode.empty:
+        dominant_duration_bucket = str(duration_mode.iloc[0])
+
     return {
         "num_videos": int(len(df)),
+        "total_views": int(df["view_count"].sum()),
         "avg_views": float(df["view_count"].mean()),
         "median_views": float(df["view_count"].median()),
         "avg_engagement_rate": float(df["engagement_rate"].mean()),
         "avg_duration_seconds": float(df["duration_seconds"].mean()),
+        "dominant_duration_bucket": dominant_duration_bucket,
     }
 
 
@@ -143,6 +152,166 @@ def analyze_keyword_patterns(df: pd.DataFrame, keywords: List[str]) -> List[Dict
         })
 
     return results
+
+
+def analyze_upload_frequency(df: pd.DataFrame) -> List[Dict[str, Any]]:
+    if df.empty or "published_at" not in df.columns:
+        return []
+
+    series = pd.to_datetime(df["published_at"], utc=True, errors="coerce")
+    valid = pd.DataFrame({"published_at": series}).dropna()
+    if valid.empty:
+        return []
+
+    end_date = valid["published_at"].max()
+    weekly_counts = (
+        valid.set_index("published_at")
+        .groupby(pd.Grouper(freq="W"))
+        .size()
+        .rename("video_count")
+    )
+
+    all_weeks = pd.date_range(end=end_date, periods=8, freq="W")
+    weekly_counts = weekly_counts.reindex(all_weeks, fill_value=0)
+
+    return [
+        {"week": week.strftime("%Y-%m-%d"), "video_count": int(count)}
+        for week, count in weekly_counts.items()
+    ]
+
+
+_STOPWORDS = {
+    "the", "and", "for", "that", "this", "with", "you", "your", "are", "was",
+    "but", "have", "has", "not", "just", "from", "they", "their", "them", "its",
+    "about", "into", "like", "very", "really", "what", "when", "where", "would",
+    "should", "could", "there", "here", "more", "than", "then", "also", "too",
+    "been", "were", "will", "while", "because", "after", "before", "food", "video",
+    "videos", "channel", "watch", "watched", "make", "made", "great", "good"
+}
+
+
+def _extract_top_themes(comments: List[str], top_n: int = 3) -> List[str]:
+    if not comments:
+        return []
+
+    token_pattern = re.compile(r"\b[a-zA-Z]{3,}\b")
+    tokens = []
+    for text in comments:
+        for token in token_pattern.findall((text or "").lower()):
+            if token not in _STOPWORDS:
+                tokens.append(token)
+
+    if not tokens:
+        return []
+
+    return [word for word, _ in Counter(tokens).most_common(top_n)]
+
+
+def analyze_comment_sentiment(df: pd.DataFrame) -> Dict[str, Any]:
+    if df.empty or "comments_text" not in df.columns:
+        return {
+            "positive_pct": 0.0,
+            "neutral_pct": 0.0,
+            "negative_pct": 0.0,
+            "top_positive_themes": [],
+            "top_negative_themes": [],
+            "num_comments_analyzed": 0,
+        }
+
+    analyzer = SentimentIntensityAnalyzer()
+    all_comments: List[str] = []
+    for raw in df["comments_text"].fillna("").tolist():
+        if not raw:
+            continue
+        all_comments.extend([part.strip() for part in raw.split("||") if part.strip()])
+
+    if not all_comments:
+        return {
+            "positive_pct": 0.0,
+            "neutral_pct": 0.0,
+            "negative_pct": 0.0,
+            "top_positive_themes": [],
+            "top_negative_themes": [],
+            "num_comments_analyzed": 0,
+        }
+
+    positive_comments: List[str] = []
+    negative_comments: List[str] = []
+    positive = 0
+    neutral = 0
+    negative = 0
+
+    for comment in all_comments:
+        score = analyzer.polarity_scores(comment).get("compound", 0.0)
+        if score >= 0.05:
+            positive += 1
+            positive_comments.append(comment)
+        elif score <= -0.05:
+            negative += 1
+            negative_comments.append(comment)
+        else:
+            neutral += 1
+
+    total = len(all_comments)
+    return {
+        "positive_pct": round((positive / total) * 100, 2),
+        "neutral_pct": round((neutral / total) * 100, 2),
+        "negative_pct": round((negative / total) * 100, 2),
+        "top_positive_themes": _extract_top_themes(positive_comments, top_n=3),
+        "top_negative_themes": _extract_top_themes(negative_comments, top_n=3),
+        "num_comments_analyzed": total,
+    }
+
+
+def analyze_sponsorship(df: pd.DataFrame) -> Dict[str, Any]:
+    if df.empty:
+        return {
+            "sponsored_count": 0,
+            "organic_count": 0,
+            "sponsored_avg_views": 0.0,
+            "organic_avg_views": 0.0,
+            "sponsored_avg_engagement": 0.0,
+            "organic_avg_engagement": 0.0,
+        }
+
+    ad_pattern = re.compile(
+        r"(#ad\b|#sponsored\b|paid partnership|this video is sponsored|sponsored by|use code|use my code)",
+        flags=re.IGNORECASE
+    )
+    descriptions = df["description"].fillna("").astype(str)
+    sponsored_mask = descriptions.str.contains(ad_pattern, regex=True)
+
+    sponsored = df[sponsored_mask]
+    organic = df[~sponsored_mask]
+
+    return {
+        "sponsored_count": int(len(sponsored)),
+        "organic_count": int(len(organic)),
+        "sponsored_avg_views": float(sponsored["view_count"].mean()) if len(sponsored) else 0.0,
+        "organic_avg_views": float(organic["view_count"].mean()) if len(organic) else 0.0,
+        "sponsored_avg_engagement": float(sponsored["engagement_rate"].mean()) if len(sponsored) else 0.0,
+        "organic_avg_engagement": float(organic["engagement_rate"].mean()) if len(organic) else 0.0,
+    }
+
+
+def analyze_top_videos(df: pd.DataFrame, top_n: int = 5) -> List[Dict[str, Any]]:
+    if df.empty:
+        return []
+
+    ranked = df.sort_values(by="engagement_rate", ascending=False).head(top_n)
+    rows = []
+    for _, row in ranked.iterrows():
+        rows.append({
+            "video_id": row.get("video_id"),
+            "title": row.get("title"),
+            "channel_title": row.get("channel_title"),
+            "view_count": int(row.get("view_count", 0)),
+            "engagement_rate": float(row.get("engagement_rate", 0.0)),
+            "duration_seconds": int(row.get("duration_seconds", 0)),
+            "duration_bucket": str(row.get("duration_bucket")),
+        })
+
+    return rows
 
 
 def save_dataframe(df: pd.DataFrame, path: str) -> None:

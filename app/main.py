@@ -1,9 +1,13 @@
+from typing import Any, Dict, List
+
 from fastapi import FastAPI, Request, Query
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from pydantic import BaseModel, Field
 
 from app.utils import run_topic_analysis, build_homepage_cards
+from app.llm_client import chat_with_analysis_context
 
 import math
 
@@ -36,16 +40,51 @@ def home(request: Request):
 
 @app.get("/homepage")
 def homepage():
-    topics = [
+    weekly_topics = [
         "nyc bagel",
         "matcha latte",
-        "brooklyn pizza"
+        "dubai chocolate",
+        "brooklyn pizza",
+        "korean corn dog",
     ]
-    result = build_homepage_cards(topics)
-    return clean_nan(result)
+    daily_topics = [
+        "smash burger",
+        "hot honey chicken sandwich",
+        "street tacos",
+    ]
+    return clean_nan(
+        {
+            "weekly": build_homepage_cards(weekly_topics),
+            "daily": build_homepage_cards(daily_topics),
+        }
+    )
 
 
 @app.get("/analyze")
 def analyze(query: str = Query(..., description="Topic to analyze")):
     result = run_topic_analysis(query)
     return clean_nan(result)
+
+
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+
+
+class ChatRequest(BaseModel):
+    topic: str
+    analysis: Dict[str, Any]
+    history: List[ChatMessage] = Field(default_factory=list)
+    message: str
+
+
+@app.post("/chat")
+def chat(payload: ChatRequest):
+    history = [{"role": m.role, "content": m.content} for m in payload.history]
+    response_text = chat_with_analysis_context(
+        topic=payload.topic,
+        analysis=payload.analysis,
+        history=history,
+        message=payload.message,
+    )
+    return clean_nan({"response": response_text})

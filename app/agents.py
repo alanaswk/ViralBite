@@ -3,9 +3,13 @@ from app.analysis_tools import (
     videos_to_dataframe,
     summarize_dataset,
     analyze_duration_patterns,
+    analyze_upload_frequency,
     analyze_keyword_patterns,
-    generate_basic_hypothesis,
+    analyze_comment_sentiment,
+    analyze_sponsorship,
+    analyze_top_videos,
 )
+from app.llm_client import generate_creator_brief
 
 
 def collector_node(state):
@@ -28,11 +32,14 @@ def analyst_node(state):
     analysis = {
         "summary": summarize_dataset(df),
         "duration_patterns": analyze_duration_patterns(df),
+        "upload_frequency": analyze_upload_frequency(df),
         "keyword_patterns": analyze_keyword_patterns(
             df,
             ["cheap", "best", "authentic", "hidden", "local"]
         ),
-        "hypothesis": generate_basic_hypothesis(df),
+        "comment_sentiment": analyze_comment_sentiment(df),
+        "sponsorship": analyze_sponsorship(df),
+        "top_videos": analyze_top_videos(df, top_n=5),
     }
 
     return {"analysis": analysis}
@@ -40,12 +47,11 @@ def analyst_node(state):
 
 def insight_node(state):
     analysis = state["analysis"]
+    creator_brief = generate_creator_brief(analysis)
 
     final_response = {
         "summary": analysis["summary"],
-        "key_finding": analysis["hypothesis"]["hypothesis"],
-        "evidence": analysis["hypothesis"]["supporting_evidence"],
-        "caveats": analysis["hypothesis"]["caveats"],
+        "creator_brief": creator_brief,
     }
 
     return {"final_response": final_response}
