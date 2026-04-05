@@ -5,6 +5,7 @@ const analyzeBtn = document.getElementById("analyze-btn");
 const loadingEl = document.getElementById("loading");
 const dashboardEl = document.getElementById("dashboard");
 const overviewCardsEl = document.getElementById("overview-cards");
+const sampleDefinitionEl = document.getElementById("sample-definition");
 const keywordSignalsEl = document.getElementById("keyword-signals");
 const sentimentBarEl = document.getElementById("sentiment-bar");
 const sentimentMetaEl = document.getElementById("sentiment-meta");
@@ -22,6 +23,13 @@ let sponsorChart = null;
 let latestAnalysis = null;
 let latestTopic = "";
 let chatHistory = [];
+const DEFAULT_ANALYZE_PARAMS = {
+  days: 30,
+  max_videos: 35,
+  order: "relevance",
+  max_pages: 2,
+  max_comments: 10,
+};
 
 function fmt(value, digits = 2) {
   if (value === null || value === undefined) return "N/A";
@@ -36,6 +44,12 @@ function toMinutes(seconds) {
   const mins = Math.floor(seconds / 60);
   const secs = seconds % 60;
   return `${mins}m ${secs}s`;
+}
+
+function truncateText(text, maxLength = 32) {
+  if (!text) return "";
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, maxLength - 1)}...`;
 }
 
 function renderTopicButtons(target, topics) {
@@ -60,7 +74,7 @@ async function loadHomepageTopics() {
   renderTopicButtons(dailyTopicsEl, data.daily || []);
 }
 
-function renderOverview(summary) {
+function renderOverview(summary, sampleDefinition) {
   const cards = [
     { label: "Total views", value: fmt(summary.total_views || 0, 0), note: `across ${fmt(summary.num_videos || 0, 0)} videos` },
     { label: "Avg engagement rate", value: `${fmt((summary.avg_engagement_rate || 0) * 100, 2)}%`, note: "likes + comments / views" },
@@ -78,6 +92,12 @@ function renderOverview(summary) {
       </div>`
     )
     .join("");
+
+  const days = sampleDefinition?.window_days ?? DEFAULT_ANALYZE_PARAMS.days;
+  const order = sampleDefinition?.order || DEFAULT_ANALYZE_PARAMS.order;
+  const count = sampleDefinition?.fetched_videos ?? summary.num_videos ?? 0;
+  sampleDefinitionEl.textContent =
+    `Based on ${fmt(count, 0)} videos from the last ${days} days (YouTube search order: ${order}).`;
 }
 
 function renderDurationChart(patterns) {
@@ -94,14 +114,45 @@ function renderDurationChart(patterns) {
           data: patterns.map((p) => (p.avg_engagement_rate || 0) * 100),
           backgroundColor: "rgba(86, 156, 246, 0.75)",
           borderRadius: 8,
+          yAxisID: "y",
+        },
+        {
+          label: "Video count (n)",
+          data: patterns.map((p) => p.video_count || 0),
+          type: "line",
+          borderColor: "rgba(233, 241, 252, 0.9)",
+          backgroundColor: "rgba(233, 241, 252, 0.9)",
+          pointRadius: 4,
+          borderWidth: 2,
+          tension: 0.25,
+          yAxisID: "yCount",
         },
       ],
     },
     options: {
       responsive: true,
-      plugins: { legend: { display: false } },
+      plugins: {
+        legend: { display: true },
+        tooltip: {
+          callbacks: {
+            afterBody(context) {
+              const idx = context?.[0]?.dataIndex ?? 0;
+              const median = patterns[idx]?.median_engagement_rate;
+              if (typeof median === "number") {
+                return [`Median engagement: ${fmt(median * 100, 2)}%`];
+              }
+              return [];
+            },
+          },
+        },
+      },
       scales: {
         y: { ticks: { callback: (v) => `${v}%` } },
+        yCount: {
+          position: "right",
+          grid: { drawOnChartArea: false },
+          ticks: { precision: 0 },
+        },
       },
     },
   });
@@ -143,7 +194,7 @@ function renderKeywordSignals(keywords) {
     .forEach((row) => {
       const chip = document.createElement("div");
       chip.className = "keyword-chip";
-      chip.innerHTML = `<strong>${row.keyword}</strong><span>${fmt((row.avg_engagement_rate || 0) * 100, 2)}% eng · ${row.video_count} videos</span>`;
+      chip.innerHTML = `<strong>${truncateText(row.keyword, 22)}</strong><span>${fmt((row.avg_engagement_rate || 0) * 100, 2)}% eng · ${row.video_count} videos</span>`;
       keywordSignalsEl.appendChild(chip);
     });
 }
@@ -254,7 +305,7 @@ function renderDashboard(payload) {
   chatMessagesEl.innerHTML = "";
   addChatMessage("assistant", `Loaded context for "${latestTopic}". Ask me anything about the dashboard.`);
 
-  renderOverview(analysis.summary || {});
+  renderOverview(analysis.summary || {}, analysis.sample_definition || {});
   renderDurationChart(analysis.duration_patterns || []);
   renderUploadChart(analysis.upload_frequency || []);
   renderKeywordSignals(analysis.keyword_patterns || []);
@@ -270,15 +321,28 @@ async function runAnalysis(topic) {
   const query = topic?.trim();
   if (!query) return;
   loadingEl.classList.remove("hidden");
+  loadingEl.textContent = "Fetching videos and comments...";
+  analyzeBtn.disabled = true;
   try {
-    const response = await fetch(`/analyze?query=${encodeURIComponent(query)}`);
+    const params = new URLSearchParams({
+      query,
+      days: String(DEFAULT_ANALYZE_PARAMS.days),
+      max_videos: String(DEFAULT_ANALYZE_PARAMS.max_videos),
+      order: DEFAULT_ANALYZE_PARAMS.order,
+      max_pages: String(DEFAULT_ANALYZE_PARAMS.max_pages),
+      max_comments: String(DEFAULT_ANALYZE_PARAMS.max_comments),
+    });
+    const response = await fetch(`/analyze?${params.toString()}`);
     const data = await response.json();
+    loadingEl.textContent = "Rendering dashboard...";
     renderDashboard(data);
   } catch (error) {
     console.error(error);
     alert("Analysis failed. Check your API keys and try again.");
   } finally {
     loadingEl.classList.add("hidden");
+    loadingEl.textContent = "Running analysis...";
+    analyzeBtn.disabled = false;
   }
 }
 

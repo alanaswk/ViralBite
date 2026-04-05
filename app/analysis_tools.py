@@ -118,6 +118,7 @@ def analyze_duration_patterns(df: pd.DataFrame) -> List[Dict[str, Any]]:
             video_count=("video_id", "count"),
             avg_views=("view_count", "mean"),
             avg_engagement_rate=("engagement_rate", "mean"),
+            median_engagement_rate=("engagement_rate", "median"),
         )
         .reset_index()
     )
@@ -125,7 +126,11 @@ def analyze_duration_patterns(df: pd.DataFrame) -> List[Dict[str, Any]]:
     return grouped.to_dict(orient="records")
 
 
-def analyze_keyword_patterns(df: pd.DataFrame, keywords: List[str]) -> List[Dict[str, Any]]:
+def analyze_keyword_patterns(
+    df: pd.DataFrame,
+    keywords: List[str],
+    top_n: int = 8,
+) -> List[Dict[str, Any]]:
     if df.empty:
         return []
 
@@ -151,7 +156,8 @@ def analyze_keyword_patterns(df: pd.DataFrame, keywords: List[str]) -> List[Dict
             "avg_engagement_rate": float(subset["engagement_rate"].mean()),
         })
 
-    return results
+    results.sort(key=lambda row: row.get("avg_engagement_rate", 0.0), reverse=True)
+    return results[:top_n]
 
 
 def analyze_upload_frequency(df: pd.DataFrame) -> List[Dict[str, Any]]:

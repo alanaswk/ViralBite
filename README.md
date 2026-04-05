@@ -13,6 +13,30 @@ Set environment variables:
 
 - `YOUTUBE_API_KEY`
 - `OPENAI_API_KEY` (for creator brief + chat)
+- `OPENAI_MODEL` (optional, defaults to `gpt-4.1-mini`)
+- `VIRALBITE_CACHE_TTL_SECONDS` (optional, defaults to `600`)
+- `VIRALBITE_COMMENT_WORKERS` (optional, defaults to `6`)
+- `VIRALBITE_MAX_COMMENT_VIDEOS` (optional, defaults to `12`; `0` means fetch comments for all videos)
+
+## Analyze defaults and tuning
+
+`GET /analyze` supports optional query parameters:
+
+- `days` (default `30`): lookback window
+- `max_videos` (default `35`, max `50`): number of videos to analyze
+- `order` (default `relevance`): YouTube search ordering
+- `max_pages` (default `2`): how many search pages to pull (up to `3`)
+- `max_comments` (default `10`): top comments per selected video
+
+The frontend uses the defaults above and the dashboard now includes a sample definition line so users can see exactly what dataset was analyzed.
+
+## Quota + latency notes
+
+- YouTube `search.list` is high quota cost (commonly `100` units per call). Increasing `max_pages` increases quota usage.
+- `videos.list` is batched and relatively cheap.
+- Comment fetches are parallelized with a bounded thread pool to reduce wall-clock latency.
+- To protect throughput, comments are fetched for only `VIRALBITE_MAX_COMMENT_VIDEOS` top-view videos by default.
+- `/analyze` responses are cached in memory for `VIRALBITE_CACHE_TTL_SECONDS`, keyed by query + analysis parameters.
 
 ## Product flow
 

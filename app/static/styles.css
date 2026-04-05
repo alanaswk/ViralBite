@@ -138,6 +138,11 @@ input {
   color: #eaf4ff;
 }
 
+.primary-btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
 .loading {
   color: var(--muted);
   margin: 12px 0;
@@ -226,6 +231,10 @@ input {
 .muted {
   color: var(--muted);
   font-size: 13px;
+}
+
+#sample-definition {
+  margin: 0 0 12px;
 }
 
 .table-wrap {

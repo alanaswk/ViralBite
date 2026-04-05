@@ -1,9 +1,15 @@
-from dotenv import load_dotenv
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime, timedelta, timezone
 import os
+from typing import Any, Dict, Optional
+
+from dotenv import load_dotenv
 from googleapiclient.discovery import build
 
 load_dotenv()
 API_KEY = os.getenv("YOUTUBE_API_KEY")
+COMMENT_WORKERS = max(1, int(os.getenv("VIRALBITE_COMMENT_WORKERS", "6")))
+MAX_COMMENT_VIDEOS_DEFAULT = int(os.getenv("VIRALBITE_MAX_COMMENT_VIDEOS", "12"))
 
 if not API_KEY:
     raise ValueError("API key not found. Check your .env file.")
@@ -41,18 +47,66 @@ def get_comments(youtube, video_id, max_comments=20):
         return []
 
 
-def collect_youtube_data(query, max_results=25, max_comments_per_video=10, fetch_comments=True):
+def _to_rfc3339_utc(days_back: Optional[int]) -> Optional[str]:
+    if not days_back or days_back <= 0:
+        return None
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days_back)
+    return cutoff.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _fetch_comments_for_video(video_id: str, max_comments: int) -> list[dict[str, Any]]:
     youtube = build("youtube", "v3", developerKey=API_KEY)
+    return get_comments(youtube=youtube, video_id=video_id, max_comments=max_comments)
 
-    search_response = youtube.search().list(
-        q=query,
-        part="snippet",
-        type="video",
-        maxResults=max_results
-    ).execute()
 
-    search_items = search_response.get("items", [])
-    video_ids = [item["id"]["videoId"] for item in search_items]
+def collect_youtube_data(
+    query,
+    max_results=25,
+    max_comments_per_video=10,
+    fetch_comments=True,
+    order="relevance",
+    window_days: Optional[int] = 30,
+    max_pages: int = 1,
+):
+    youtube = build("youtube", "v3", developerKey=API_KEY)
+    target_results = max(1, min(int(max_results), 50))
+    page_limit = max(1, min(int(max_pages), 3))
+    published_after = _to_rfc3339_utc(window_days)
+    search_items: list[dict[str, Any]] = []
+    seen_video_ids = set()
+    next_page_token = None
+
+    for _ in range(page_limit):
+        request_payload = {
+            "q": query,
+            "part": "snippet",
+            "type": "video",
+            "maxResults": min(50, target_results),
+            "order": order,
+        }
+        if next_page_token:
+            request_payload["pageToken"] = next_page_token
+        if published_after:
+            request_payload["publishedAfter"] = published_after
+
+        search_response = youtube.search().list(**request_payload).execute()
+        for item in search_response.get("items", []):
+            video_id = item.get("id", {}).get("videoId")
+            if not video_id or video_id in seen_video_ids:
+                continue
+            seen_video_ids.add(video_id)
+            search_items.append(item)
+            if len(search_items) >= target_results:
+                break
+
+        if len(search_items) >= target_results:
+            break
+        next_page_token = search_response.get("nextPageToken")
+        if not next_page_token:
+            break
+
+    search_items = search_items[:target_results]
+    video_ids = [item["id"]["videoId"] for item in search_items if item.get("id", {}).get("videoId")]
 
     if not video_ids:
         return []
@@ -74,14 +128,6 @@ def collect_youtube_data(query, max_results=25, max_comments_per_video=10, fetch
         content_details = detail.get("contentDetails", {})
         status = detail.get("status", {})
         topic_details = detail.get("topicDetails", {})
-
-        comments_text = []
-        if fetch_comments:
-            comments_text = get_comments(
-                youtube=youtube,
-                video_id=vid,
-                max_comments=max_comments_per_video
-            )
 
         video_record = {
             "video_id": vid,
@@ -130,9 +176,34 @@ def collect_youtube_data(query, max_results=25, max_comments_per_video=10, fetch
             "topic_categories": topic_details.get("topicCategories", []),
 
             # comments
-            "top_comments": comments_text
+            "top_comments": []
         }
 
         videos.append(video_record)
+
+    if fetch_comments and videos:
+        sorted_by_views = sorted(videos, key=lambda x: x.get("view_count", 0), reverse=True)
+        comment_video_budget = MAX_COMMENT_VIDEOS_DEFAULT
+        if comment_video_budget and comment_video_budget > 0:
+            eligible_video_ids = {video["video_id"] for video in sorted_by_views[:comment_video_budget]}
+        else:
+            eligible_video_ids = {video["video_id"] for video in sorted_by_views}
+
+        comments_by_video = {}
+        with ThreadPoolExecutor(max_workers=COMMENT_WORKERS) as executor:
+            future_map = {
+                executor.submit(_fetch_comments_for_video, video["video_id"], max_comments_per_video): video["video_id"]
+                for video in videos
+                if video["video_id"] in eligible_video_ids
+            }
+            for future in as_completed(future_map):
+                video_id = future_map[future]
+                try:
+                    comments_by_video[video_id] = future.result()
+                except Exception:
+                    comments_by_video[video_id] = []
+
+        for video in videos:
+            video["top_comments"] = comments_by_video.get(video["video_id"], [])
 
     return videos

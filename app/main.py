@@ -61,8 +61,22 @@ def homepage():
 
 
 @app.get("/analyze")
-def analyze(query: str = Query(..., description="Topic to analyze")):
-    result = run_topic_analysis(query)
+def analyze(
+    query: str = Query(..., description="Topic to analyze"),
+    days: int = Query(30, ge=1, le=365, description="Lookback window in days"),
+    max_videos: int = Query(35, ge=1, le=50, description="Maximum videos to analyze"),
+    order: str = Query("relevance", description="YouTube search order"),
+    max_pages: int = Query(2, ge=1, le=3, description="Maximum search result pages"),
+    max_comments: int = Query(10, ge=1, le=50, description="Top comments per video"),
+):
+    result = run_topic_analysis(
+        query=query,
+        window_days=days,
+        max_results=max_videos,
+        order=order,
+        max_pages=max_pages,
+        max_comments_per_video=max_comments,
+    )
     return clean_nan(result)
 
 
