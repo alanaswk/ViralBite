@@ -79,31 +79,17 @@
     </div>
 
     <section id="dashboard" class="hidden">
-      <nav class="dashboard-subnav" id="dashboard-subnav" aria-label="Dashboard sections">
-        <div class="dashboard-subnav-inner">
-          <a href="#dash-overview" class="subnav-link" data-tab="overview">Overview</a>
-          <a href="#dash-charts" class="subnav-link" data-tab="analysis">Charts</a>
-          <a href="#dash-insights" class="subnav-link" data-tab="analysis">Insights</a>
-          <a href="#dash-videos" class="subnav-link" data-tab="analysis">Top videos</a>
-          <a href="#dash-brief" class="subnav-link" data-tab="brief">Brief</a>
-          <a href="#dash-chat" class="subnav-link" data-tab="brief">Chat</a>
-        </div>
-      </nav>
-
       <div class="dashboard-tabs" role="tablist" aria-label="Dashboard views">
-        <button type="button" class="dashboard-tab" role="tab" id="tab-btn-overview" aria-controls="tab-panel-overview" aria-selected="true" data-tab="overview">Overview</button>
-        <button type="button" class="dashboard-tab" role="tab" id="tab-btn-analysis" aria-controls="tab-panel-analysis" aria-selected="false" data-tab="analysis">Analysis</button>
+        <button type="button" class="dashboard-tab" role="tab" id="tab-btn-analysis" aria-controls="tab-panel-analysis" aria-selected="true" data-tab="analysis">Analysis</button>
         <button type="button" class="dashboard-tab" role="tab" id="tab-btn-brief" aria-controls="tab-panel-brief" aria-selected="false" data-tab="brief">Brief &amp; chat</button>
       </div>
 
-      <div id="tab-panel-overview" role="tabpanel" aria-labelledby="tab-btn-overview" class="tab-panel" data-tab-panel="overview">
+      <div id="tab-panel-analysis" role="tabpanel" aria-labelledby="tab-btn-analysis" class="tab-panel" data-tab-panel="analysis">
         <div id="dash-overview" class="anchor-target">
           <div class="overview-grid reveal-on-scroll" id="overview-cards"></div>
           <div id="sample-definition" class="muted"></div>
         </div>
-      </div>
 
-      <div id="tab-panel-analysis" role="tabpanel" aria-labelledby="tab-btn-analysis" class="tab-panel" data-tab-panel="analysis" hidden>
         <div id="dash-charts" class="anchor-target">
           <div class="main-grid">
             <section class="panel reveal-on-scroll chart-panel">
@@ -116,18 +102,15 @@
               </div>
             </section>
 
-            <details class="panel reveal-on-scroll chart-details">
-              <summary class="chart-details-summary">
-                <span class="chart-details-title">Upload frequency (last 8 weeks)</span>
-                <span class="chart-details-hint">Show chart</span>
-              </summary>
-              <div class="chart-details-body">
-                <p class="chart-summary" id="upload-chart-summary" aria-live="polite"></p>
-                <div class="chart-canvas-wrap">
-                  <canvas id="uploadChart"></canvas>
-                </div>
+            <section class="panel reveal-on-scroll chart-panel">
+              <div class="section-title">
+                <h2>Upload frequency (last 8 weeks)</h2>
               </div>
-            </details>
+              <p class="chart-summary" id="upload-chart-summary" aria-live="polite"></p>
+              <div class="chart-canvas-wrap">
+                <canvas id="uploadChart"></canvas>
+              </div>
+            </section>
           </div>
         </div>
 
@@ -151,22 +134,19 @@
               <div id="sentiment-meta" class="insight-meta"></div>
             </section>
 
-            <details class="panel insight-panel reveal-on-scroll chart-details">
-              <summary class="chart-details-summary">
-                <span class="chart-details-title">Sponsored vs organic</span>
-                <span class="chart-details-hint">Show breakdown</span>
-              </summary>
-              <div class="chart-details-body">
-                <p class="panel-subtitle">Detected via #ad / &quot;sponsored by&quot; in descriptions</p>
-                <div class="sponsor-insight">
-                  <div class="sponsor-chart-wrap chart-canvas-wrap chart-canvas-wrap--donut">
-                    <canvas id="sponsorChart"></canvas>
-                  </div>
-                  <div id="sponsor-legend" class="sponsor-legend"></div>
-                </div>
-                <div id="sponsor-meta" class="insight-meta"></div>
+            <section class="panel insight-panel reveal-on-scroll">
+              <div class="section-title">
+                <h2>Sponsored vs organic</h2>
               </div>
-            </details>
+              <p class="panel-subtitle">Detected via #ad / &quot;sponsored by&quot; in descriptions</p>
+              <div class="sponsor-insight">
+                <div class="sponsor-chart-wrap chart-canvas-wrap chart-canvas-wrap--donut">
+                  <canvas id="sponsorChart"></canvas>
+                </div>
+                <div id="sponsor-legend" class="sponsor-legend"></div>
+              </div>
+              <div id="sponsor-meta" class="insight-meta"></div>
+            </section>
           </div>
         </div>
 

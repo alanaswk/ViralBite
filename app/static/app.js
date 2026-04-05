@@ -35,7 +35,7 @@ const DEFAULT_ANALYZE_PARAMS = {
   max_comments: 10,
 };
 
-const PILL_VARIANTS = ["terra", "cream", "ink", "organic", "outline"];
+const PILL_VARIANTS = ["terra", "cream"];
 
 let lastDashboardPayload = null;
 let scrollObserver = null;
@@ -158,7 +158,7 @@ function initDashboardTabs() {
 
   tabButtons.forEach((btn) => {
     btn.addEventListener("click", () => {
-      setActiveTab(btn.dataset.tab || "overview");
+      setActiveTab(btn.dataset.tab || "analysis");
     });
   });
 
@@ -175,57 +175,11 @@ function initDashboardTabs() {
       else if (e.key === "Home") next = 0;
       else if (e.key === "End") next = tabs.length - 1;
       tabs[next].focus();
-      setActiveTab(tabs[next].dataset.tab || "overview");
+      setActiveTab(tabs[next].dataset.tab || "analysis");
     });
   });
 
   window.__viralbiteSetActiveTab = setActiveTab;
-}
-
-function initDashboardSubnav() {
-  const links = document.querySelectorAll("#dashboard-subnav .subnav-link");
-  if (!links.length) return;
-
-  function setCurrentFromHash(href) {
-    links.forEach((a) => {
-      const on = a.getAttribute("href") === href;
-      if (on) a.setAttribute("aria-current", "page");
-      else a.removeAttribute("aria-current");
-    });
-  }
-
-  links.forEach((link) => {
-    link.addEventListener("click", (e) => {
-      e.preventDefault();
-      const tab = link.dataset.tab;
-      const href = link.getAttribute("href");
-      if (tab && window.__viralbiteSetActiveTab) {
-        window.__viralbiteSetActiveTab(tab);
-      }
-      const id = href && href.startsWith("#") ? href.slice(1) : "";
-      const target = id ? document.getElementById(id) : null;
-      if (target) {
-        requestAnimationFrame(() => {
-          target.scrollIntoView({ behavior: "smooth", block: "start" });
-        });
-      }
-      if (href) setCurrentFromHash(href);
-    });
-  });
-}
-
-function bindChartDetailsResize() {
-  document.querySelectorAll(".chart-details").forEach((details) => {
-    details.addEventListener("toggle", () => {
-      if (!details.open) return;
-      if (details.querySelector("#uploadChart") && uploadChart) {
-        requestAnimationFrame(() => uploadChart.resize());
-      }
-      if (details.querySelector("#sponsorChart") && sponsorChart) {
-        requestAnimationFrame(() => sponsorChart.resize());
-      }
-    });
-  });
 }
 
 /** Chart.js measures 0×0 when the analysis tab is hidden; prime after first render. */
@@ -237,7 +191,7 @@ function primeChartsAfterDashboardRender() {
     durationChart?.resize();
     uploadChart?.resize();
     sponsorChart?.resize();
-    window.__viralbiteSetActiveTab("overview");
+    window.__viralbiteSetActiveTab("analysis");
     dashboardEl.style.visibility = "";
   });
 }
@@ -502,11 +456,7 @@ function renderKeywordSignals(keywords) {
       chip.className = `keyword-chip pill pill--${variant}`;
       const keywordName = truncateText(row.keyword, 22);
       const meta = `${fmt((row.avg_engagement_rate || 0) * 100, 2)}% eng · ${row.video_count} videos`;
-      const titleBlock =
-        variant === "organic"
-          ? `<span class="keyword-chip-titleline"><span class="pill-dot" aria-hidden="true"></span><strong>${keywordName}</strong></span>`
-          : `<strong>${keywordName}</strong>`;
-      chip.innerHTML = `${titleBlock}<span class="keyword-chip-meta">${meta}</span>`;
+      chip.innerHTML = `<strong>${keywordName}</strong><span class="keyword-chip-meta">${meta}</span>`;
       keywordSignalsEl.appendChild(chip);
     });
 }
@@ -894,20 +844,25 @@ function renderDashboard(payload) {
 
   dashboardEl.classList.remove("hidden");
   if (window.__viralbiteSetActiveTab) {
-    window.__viralbiteSetActiveTab("overview");
+    window.__viralbiteSetActiveTab("analysis");
   }
-  document.querySelectorAll("#dashboard-subnav .subnav-link").forEach((a) => a.removeAttribute("aria-current"));
-  const overviewLink = document.querySelector('#dashboard-subnav a[href="#dash-overview"]');
-  if (overviewLink) overviewLink.setAttribute("aria-current", "page");
   primeChartsAfterDashboardRender();
   observeRevealElements();
+}
+
+/** Lets the browser paint loading steps before the next microtask-heavy work. */
+function loadingYield(ms = 140) {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => {
+      setTimeout(resolve, ms);
+    });
+  });
 }
 
 async function runAnalysis(topic) {
   const query = topic?.trim();
   if (!query) return;
   setLoadingVisible(true);
-  setLoadingStep(0);
   analyzeBtn.disabled = true;
   try {
     const params = new URLSearchParams({
@@ -920,9 +875,10 @@ async function runAnalysis(topic) {
     });
     const response = await fetch(`/analyze?${params.toString()}`);
     setLoadingStep(1);
+    await loadingYield();
     const data = await response.json();
     setLoadingStep(2);
-    await new Promise((r) => requestAnimationFrame(r));
+    await loadingYield();
     renderDashboard(data);
   } catch (error) {
     console.error(error);
@@ -946,7 +902,5 @@ initTheme();
 initScrollReveal();
 initThemeToggle();
 initDashboardTabs();
-initDashboardSubnav();
-bindChartDetailsResize();
 window.addEventListener("viralbite-theme-change", refreshChartsForTheme);
 loadHomepageTopics().then(() => observeRevealElements());

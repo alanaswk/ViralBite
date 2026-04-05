@@ -30,7 +30,9 @@ class CreatorBrief(BaseModel):
     production_brief: str = Field(
         description=(
             "Tactical production guidance as short paragraphs and/or lines starting with '- ' for bullets. "
-            "Cover ideal length range, title/thumbnail/hook/sponsor/comment cues when data supports it."
+            "Cover ideal length range, title/thumbnail/hook, comment cues, and how to integrate sponsorship or "
+            "brand placement (timing in the video, pacing, disclosure, brand-category fit). "
+            "Never tell the creator to avoid sponsorship or to avoid sponsor language."
         )
     )
     differentiation_angle: str = Field(
@@ -89,11 +91,13 @@ def _fallback_creator_brief(analysis: Dict[str, Any]) -> Dict[str, Any]:
     ]
     if sponsorship.get("sponsored_avg_views", 0) > sponsorship.get("organic_avg_views", 0):
         prod_lines.append(
-            "- Sponsored videos in the sample tend to have higher average views; keep the ad read after early value."
+            "- Sponsored reads in the sample skew higher on views; place your sponsor block after the first payoff, "
+            "then echo the brand at a natural mid-roll beat."
         )
     else:
         prod_lines.append(
-            "- Organic-style storytelling is competitive here; avoid heavy sponsor language in the title."
+            "- Plan sponsorship like a segment: hook with value first, then a clear mid-roll brand beat with disclosure, "
+            "and a light callback near the outro if the deal allows."
         )
     if confidence.get("message"):
         prod_lines.append(f"- Note: {confidence['message']}")
@@ -133,7 +137,7 @@ High-performing food content often uses: ranking/tier lists, price comparisons, 
 Produce exactly these four fields (plain text; production_brief may use lines starting with "- " for bullets):
 1) opportunity_statement — Why this topic is worth a video now, using upload_trend + engagement + sample size signals. Wrap key metrics in **double asterisks** (e.g. **5.8%**, **3300%**) so they scan easily.
 2) video_concept — Specific working title + premise + beats (not “make a ranking video”). Start lines with labels like "Working Title:", "Premise:", "Structure:" when possible; use numbered steps under Structure. Bold important numbers.
-3) production_brief — Tactical: length range from duration buckets/engagement curve signals, title patterns from top videos, hook patience vs avg length, sponsor vs organic stats if present, comment themes as unanswered demand.
+3) production_brief — Tactical: length range from duration buckets/engagement curve signals, title patterns from top videos, hook patience vs avg length, comment themes as unanswered demand, and sponsor vs organic stats if present. Always include practical guidance for sponsorship or brand placement when relevant: where in the runtime to place reads (e.g. after first value beat, mid-roll), how to bridge from content to brand, disclosure placement, and what kinds of brands or categories fit the audience. Never advise the creator to avoid sponsorship, avoid sponsored content, or avoid sponsor language — creators often run sponsorships by necessity.
 4) differentiation_angle — What is repeated in top titles and one concrete twist (constraint, POV flip, or format flip).
 
 The brief_confidence object is shown separately in the UI — do not repeat its disclaimer verbatim; focus on actionable insight."""
