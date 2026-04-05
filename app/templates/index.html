@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -11,16 +11,23 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
-  <header class="hero">
+  <header class="hero reveal-on-scroll">
     <div class="hero-inner">
+      <button type="button" id="theme-toggle" class="theme-toggle" aria-pressed="false" aria-labelledby="theme-toggle-label" title="Switch color theme">
+        <span class="theme-toggle-icon theme-toggle-sun" aria-hidden="true">☀</span>
+        <span class="theme-toggle-icon theme-toggle-moon" aria-hidden="true">☾</span>
+        <span id="theme-toggle-label" class="theme-toggle-label">Theme</span>
+      </button>
       <p class="eyebrow">creator trend intelligence</p>
-      <h1 class="brand-title">ViralBite</h1>
+      <h1 class="brand-title">
+        <span class="brand-viral">Viral</span><span class="brand-bite">Bite</span>
+      </h1>
       <p class="hero-copy">Pick a trending topic, inspect the metrics, and get a data-grounded creator brief plus chat support.</p>
     </div>
   </header>
 
   <main class="page">
-    <section class="panel landing">
+    <section class="panel landing reveal-on-scroll">
       <div class="section-title">
         <h2>Today's trending topics</h2>
         <span class="badge">hardcoded demo list</span>
@@ -43,101 +50,170 @@
       </div>
     </section>
 
-    <div id="loading" class="loading hidden">Running analysis...</div>
+    <div id="loading" class="loading hidden" aria-live="polite" aria-busy="false">
+      <div class="loading-header">
+        <p class="loading-title">Running analysis</p>
+        <ol class="loading-steps" aria-label="Progress">
+          <li class="loading-step" data-step="0">Fetching videos &amp; comments</li>
+          <li class="loading-step" data-step="1">Scoring engagement &amp; patterns</li>
+          <li class="loading-step" data-step="2">Building your creator brief</li>
+        </ol>
+        <div class="loading-bar" aria-hidden="true">
+          <div class="loading-bar-fill" id="loading-bar-fill"></div>
+        </div>
+      </div>
+      <div class="loading-skeleton" aria-hidden="true">
+        <div class="skeleton-block"></div>
+        <div class="skeleton-block skeleton-block--short"></div>
+        <div class="skeleton-grid">
+          <div class="skeleton-pill"></div>
+          <div class="skeleton-pill"></div>
+          <div class="skeleton-pill"></div>
+        </div>
+      </div>
+    </div>
 
     <section id="dashboard" class="hidden">
-      <div class="overview-grid" id="overview-cards"></div>
-      <div id="sample-definition" class="muted"></div>
+      <nav class="dashboard-subnav" id="dashboard-subnav" aria-label="Dashboard sections">
+        <div class="dashboard-subnav-inner">
+          <a href="#dash-overview" class="subnav-link" data-tab="overview">Overview</a>
+          <a href="#dash-charts" class="subnav-link" data-tab="analysis">Charts</a>
+          <a href="#dash-insights" class="subnav-link" data-tab="analysis">Insights</a>
+          <a href="#dash-videos" class="subnav-link" data-tab="analysis">Top videos</a>
+          <a href="#dash-brief" class="subnav-link" data-tab="brief">Brief</a>
+          <a href="#dash-chat" class="subnav-link" data-tab="brief">Chat</a>
+        </div>
+      </nav>
 
-      <div class="main-grid">
-        <section class="panel">
-          <div class="section-title">
-            <h2>Engagement by duration</h2>
-          </div>
-          <canvas id="durationChart"></canvas>
-        </section>
-
-        <section class="panel">
-          <div class="section-title">
-            <h2>Upload frequency (last 8 weeks)</h2>
-          </div>
-          <canvas id="uploadChart"></canvas>
-        </section>
+      <div class="dashboard-tabs" role="tablist" aria-label="Dashboard views">
+        <button type="button" class="dashboard-tab" role="tab" id="tab-btn-overview" aria-controls="tab-panel-overview" aria-selected="true" data-tab="overview">Overview</button>
+        <button type="button" class="dashboard-tab" role="tab" id="tab-btn-analysis" aria-controls="tab-panel-analysis" aria-selected="false" data-tab="analysis">Analysis</button>
+        <button type="button" class="dashboard-tab" role="tab" id="tab-btn-brief" aria-controls="tab-panel-brief" aria-selected="false" data-tab="brief">Brief &amp; chat</button>
       </div>
 
-      <div class="insights-grid">
-        <section class="panel insight-panel">
-          <div class="section-title">
-            <h2>Keyword signals</h2>
-          </div>
-          <p class="panel-subtitle">Keywords by avg engagement in titles/tags</p>
-          <div id="keyword-signals" class="keyword-list"></div>
-        </section>
+      <div id="tab-panel-overview" role="tabpanel" aria-labelledby="tab-btn-overview" class="tab-panel" data-tab-panel="overview">
+        <div id="dash-overview" class="anchor-target">
+          <div class="overview-grid reveal-on-scroll" id="overview-cards"></div>
+          <div id="sample-definition" class="muted"></div>
+        </div>
+      </div>
 
-        <section class="panel insight-panel">
-          <div class="section-title">
-            <h2>Comment sentiment</h2>
-          </div>
-          <p class="panel-subtitle">VADER analysis across top comments</p>
-          <div id="sentiment-bar" class="sentiment-bar"></div>
-          <div id="sentiment-legend" class="sentiment-legend" aria-hidden="true"></div>
-          <div id="sentiment-meta" class="insight-meta"></div>
-        </section>
+      <div id="tab-panel-analysis" role="tabpanel" aria-labelledby="tab-btn-analysis" class="tab-panel" data-tab-panel="analysis" hidden>
+        <div id="dash-charts" class="anchor-target">
+          <div class="main-grid">
+            <section class="panel reveal-on-scroll chart-panel">
+              <div class="section-title">
+                <h2>Engagement by duration</h2>
+              </div>
+              <p class="chart-summary" id="duration-chart-summary" aria-live="polite"></p>
+              <div class="chart-canvas-wrap">
+                <canvas id="durationChart"></canvas>
+              </div>
+            </section>
 
-        <section class="panel insight-panel">
-          <div class="section-title">
-            <h2>Sponsored vs organic</h2>
+            <details class="panel reveal-on-scroll chart-details">
+              <summary class="chart-details-summary">
+                <span class="chart-details-title">Upload frequency (last 8 weeks)</span>
+                <span class="chart-details-hint">Show chart</span>
+              </summary>
+              <div class="chart-details-body">
+                <p class="chart-summary" id="upload-chart-summary" aria-live="polite"></p>
+                <div class="chart-canvas-wrap">
+                  <canvas id="uploadChart"></canvas>
+                </div>
+              </div>
+            </details>
           </div>
-          <p class="panel-subtitle">Detected via #ad / &quot;sponsored by&quot; in descriptions</p>
-          <div class="sponsor-insight">
-            <div class="sponsor-chart-wrap">
-              <canvas id="sponsorChart"></canvas>
+        </div>
+
+        <div id="dash-insights" class="anchor-target insights-anchor">
+          <div class="insights-grid">
+            <section class="panel insight-panel reveal-on-scroll">
+              <div class="section-title">
+                <h2>Keyword signals</h2>
+              </div>
+              <p class="panel-subtitle">Keywords by avg engagement in titles/tags</p>
+              <div id="keyword-signals" class="keyword-list"></div>
+            </section>
+
+            <section class="panel insight-panel reveal-on-scroll">
+              <div class="section-title">
+                <h2>Comment sentiment</h2>
+              </div>
+              <p class="panel-subtitle">VADER analysis across top comments</p>
+              <div id="sentiment-bar" class="sentiment-bar"></div>
+              <div id="sentiment-legend" class="sentiment-legend" aria-hidden="true"></div>
+              <div id="sentiment-meta" class="insight-meta"></div>
+            </section>
+
+            <details class="panel insight-panel reveal-on-scroll chart-details">
+              <summary class="chart-details-summary">
+                <span class="chart-details-title">Sponsored vs organic</span>
+                <span class="chart-details-hint">Show breakdown</span>
+              </summary>
+              <div class="chart-details-body">
+                <p class="panel-subtitle">Detected via #ad / &quot;sponsored by&quot; in descriptions</p>
+                <div class="sponsor-insight">
+                  <div class="sponsor-chart-wrap chart-canvas-wrap chart-canvas-wrap--donut">
+                    <canvas id="sponsorChart"></canvas>
+                  </div>
+                  <div id="sponsor-legend" class="sponsor-legend"></div>
+                </div>
+                <div id="sponsor-meta" class="insight-meta"></div>
+              </div>
+            </details>
+          </div>
+        </div>
+
+        <div id="dash-videos" class="anchor-target">
+          <section class="panel reveal-on-scroll">
+            <div class="section-title">
+              <h2>Top performing videos</h2>
             </div>
-            <div id="sponsor-legend" class="sponsor-legend"></div>
-          </div>
-          <div id="sponsor-meta" class="insight-meta"></div>
-        </section>
+            <div class="table-wrap">
+              <table id="top-videos-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Title</th>
+                    <th>Views</th>
+                    <th>Engagement</th>
+                    <th>Length</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </section>
+        </div>
       </div>
 
-      <section class="panel">
-        <div class="section-title">
-          <h2>Top performing videos</h2>
-        </div>
-        <div class="table-wrap">
-          <table id="top-videos-table">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Title</th>
-                <th>Views</th>
-                <th>Engagement</th>
-                <th>Length</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
-        </div>
-      </section>
+      <div id="tab-panel-brief" role="tabpanel" aria-labelledby="tab-btn-brief" class="tab-panel" data-tab-panel="brief" hidden>
+        <div class="main-grid brief-chat-grid">
+          <div id="dash-brief" class="anchor-target brief-payoff">
+            <section class="panel creator-brief-panel reveal-on-scroll">
+              <p class="brief-eyebrow">Creator brief</p>
+              <div class="section-title">
+                <h2 id="creator-brief-title">Your video recommendation</h2>
+              </div>
+              <div id="brief-confidence" class="brief-confidence hidden" role="status"></div>
+              <div id="creator-brief-body" class="creator-brief-body"></div>
+            </section>
+          </div>
 
-      <div class="main-grid">
-        <section class="panel creator-brief-panel">
-          <div class="section-title">
-            <h2 id="creator-brief-title">Your video recommendation</h2>
+          <div id="dash-chat" class="anchor-target">
+            <section class="panel chat-panel reveal-on-scroll">
+              <div class="section-title">
+                <h2>Ask ViralBite Chat</h2>
+              </div>
+              <div id="chat-messages" class="chat-messages"></div>
+              <div class="chat-input-row">
+                <input id="chat-input" type="text" placeholder="Ask about the graphs or recommendations..." />
+                <button id="chat-send-btn" class="primary-btn">Send</button>
+              </div>
+            </section>
           </div>
-          <div id="brief-confidence" class="brief-confidence hidden" role="status"></div>
-          <div id="creator-brief-body" class="creator-brief-body"></div>
-        </section>
-
-        <section class="panel chat-panel">
-          <div class="section-title">
-            <h2>Ask ViralBite Chat</h2>
-          </div>
-          <div id="chat-messages" class="chat-messages"></div>
-          <div class="chat-input-row">
-            <input id="chat-input" type="text" placeholder="Ask about the graphs or recommendations..." />
-            <button id="chat-send-btn" class="primary-btn">Send</button>
-          </div>
-        </section>
+        </div>
       </div>
     </section>
   </main>

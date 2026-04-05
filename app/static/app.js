@@ -19,6 +19,7 @@ const creatorBriefBodyEl = document.getElementById("creator-brief-body");
 const chatMessagesEl = document.getElementById("chat-messages");
 const chatInputEl = document.getElementById("chat-input");
 const chatSendBtn = document.getElementById("chat-send-btn");
+const themeToggleBtn = document.getElementById("theme-toggle");
 
 let durationChart = null;
 let uploadChart = null;
@@ -34,16 +35,224 @@ const DEFAULT_ANALYZE_PARAMS = {
   max_comments: 10,
 };
 
-/** Style kit — chart colors on cream panels */
-const CHART = {
-  paprika: "rgba(232, 114, 74, 0.88)",
-  chili: "rgba(200, 75, 47, 0.92)",
-  brick: "#8b3520",
-  saffron: "rgba(245, 192, 122, 0.95)",
-  grid: "rgba(232, 224, 216, 0.85)",
-  tick: "#8b6a4a",
-  legend: "#1a1008",
-};
+const PILL_VARIANTS = ["terra", "cream", "ink", "organic", "outline"];
+
+let lastDashboardPayload = null;
+let scrollObserver = null;
+
+function chartPalette() {
+  const r = document.documentElement;
+  const g = (name, fallback) => {
+    const v = getComputedStyle(r).getPropertyValue(name).trim();
+    return v || fallback;
+  };
+  return {
+    paprika: g("--chart-paprika", "rgba(232, 114, 74, 0.88)"),
+    chili: g("--chart-chili", "rgba(200, 75, 47, 0.92)"),
+    brick: g("--chart-brick", "#8b3520"),
+    saffron: g("--chart-saffron", "rgba(245, 192, 122, 0.95)"),
+    grid: g("--chart-grid", "rgba(232, 224, 216, 0.85)"),
+    tick: g("--chart-tick", "#8b6a4a"),
+    legend: g("--chart-legend", "#1a1008"),
+  };
+}
+
+function syncThemeToggleAria() {
+  if (!themeToggleBtn) return;
+  const dark = document.documentElement.getAttribute("data-theme") === "dark";
+  themeToggleBtn.setAttribute("aria-pressed", dark ? "true" : "false");
+}
+
+function initTheme() {
+  const saved = localStorage.getItem("viralbite-theme");
+  const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+  const theme = saved || (prefersDark ? "dark" : "light");
+  document.documentElement.setAttribute("data-theme", theme);
+  syncThemeToggleAria();
+}
+
+function initThemeToggle() {
+  if (!themeToggleBtn) return;
+  themeToggleBtn.addEventListener("click", () => {
+    const next = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
+    document.documentElement.setAttribute("data-theme", next);
+    localStorage.setItem("viralbite-theme", next);
+    syncThemeToggleAria();
+    window.dispatchEvent(new CustomEvent("viralbite-theme-change"));
+  });
+}
+
+function refreshChartsForTheme() {
+  if (!lastDashboardPayload?.analysis) return;
+  const a = lastDashboardPayload.analysis;
+  renderDurationChart(a.duration_patterns || []);
+  renderUploadChart(a.upload_frequency || []);
+  renderSponsor(a.sponsorship || {});
+}
+
+function observeRevealElements() {
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    document.querySelectorAll(".reveal-on-scroll").forEach((el) => el.classList.add("is-visible"));
+    return;
+  }
+  if (!scrollObserver) return;
+  document.querySelectorAll(".reveal-on-scroll:not([data-reveal-observed])").forEach((el) => {
+    el.dataset.revealObserved = "1";
+    scrollObserver.observe(el);
+  });
+}
+
+function setLoadingStep(stepIndex) {
+  if (!loadingEl) return;
+  const steps = loadingEl.querySelectorAll(".loading-step");
+  const fill = document.getElementById("loading-bar-fill");
+  const n = steps.length || 3;
+  steps.forEach((el, i) => {
+    el.classList.toggle("is-active", i === stepIndex);
+    el.classList.toggle("is-done", i < stepIndex);
+  });
+  if (fill) {
+    const pct = Math.min(100, ((stepIndex + 1) / n) * 100);
+    fill.style.width = `${pct}%`;
+  }
+}
+
+function setLoadingVisible(visible) {
+  if (!loadingEl) return;
+  loadingEl.classList.toggle("hidden", !visible);
+  loadingEl.setAttribute("aria-busy", visible ? "true" : "false");
+  if (visible) setLoadingStep(0);
+}
+
+function initDashboardTabs() {
+  const tabButtons = document.querySelectorAll(".dashboard-tab");
+  const panels = document.querySelectorAll("[data-tab-panel]");
+  if (!tabButtons.length || !panels.length) return;
+
+  function resizeAnalysisCharts() {
+    requestAnimationFrame(() => {
+      durationChart?.resize();
+      uploadChart?.resize();
+      sponsorChart?.resize();
+    });
+  }
+
+  function setActiveTab(tabName) {
+    tabButtons.forEach((btn) => {
+      const sel = btn.dataset.tab === tabName;
+      btn.setAttribute("aria-selected", sel ? "true" : "false");
+      btn.tabIndex = sel ? 0 : -1;
+    });
+    panels.forEach((panel) => {
+      const show = panel.dataset.tabPanel === tabName;
+      panel.hidden = !show;
+    });
+    if (tabName === "analysis") {
+      resizeAnalysisCharts();
+    }
+  }
+
+  tabButtons.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      setActiveTab(btn.dataset.tab || "overview");
+    });
+  });
+
+  tabButtons.forEach((btn) => {
+    btn.addEventListener("keydown", (e) => {
+      const keys = ["ArrowLeft", "ArrowRight", "Home", "End"];
+      if (!keys.includes(e.key)) return;
+      e.preventDefault();
+      const tabs = Array.from(tabButtons);
+      const cur = tabs.findIndex((b) => b.getAttribute("aria-selected") === "true");
+      let next = cur >= 0 ? cur : 0;
+      if (e.key === "ArrowRight") next = (next + 1) % tabs.length;
+      else if (e.key === "ArrowLeft") next = (next - 1 + tabs.length) % tabs.length;
+      else if (e.key === "Home") next = 0;
+      else if (e.key === "End") next = tabs.length - 1;
+      tabs[next].focus();
+      setActiveTab(tabs[next].dataset.tab || "overview");
+    });
+  });
+
+  window.__viralbiteSetActiveTab = setActiveTab;
+}
+
+function initDashboardSubnav() {
+  const links = document.querySelectorAll("#dashboard-subnav .subnav-link");
+  if (!links.length) return;
+
+  function setCurrentFromHash(href) {
+    links.forEach((a) => {
+      const on = a.getAttribute("href") === href;
+      if (on) a.setAttribute("aria-current", "page");
+      else a.removeAttribute("aria-current");
+    });
+  }
+
+  links.forEach((link) => {
+    link.addEventListener("click", (e) => {
+      e.preventDefault();
+      const tab = link.dataset.tab;
+      const href = link.getAttribute("href");
+      if (tab && window.__viralbiteSetActiveTab) {
+        window.__viralbiteSetActiveTab(tab);
+      }
+      const id = href && href.startsWith("#") ? href.slice(1) : "";
+      const target = id ? document.getElementById(id) : null;
+      if (target) {
+        requestAnimationFrame(() => {
+          target.scrollIntoView({ behavior: "smooth", block: "start" });
+        });
+      }
+      if (href) setCurrentFromHash(href);
+    });
+  });
+}
+
+function bindChartDetailsResize() {
+  document.querySelectorAll(".chart-details").forEach((details) => {
+    details.addEventListener("toggle", () => {
+      if (!details.open) return;
+      if (details.querySelector("#uploadChart") && uploadChart) {
+        requestAnimationFrame(() => uploadChart.resize());
+      }
+      if (details.querySelector("#sponsorChart") && sponsorChart) {
+        requestAnimationFrame(() => sponsorChart.resize());
+      }
+    });
+  });
+}
+
+/** Chart.js measures 0×0 when the analysis tab is hidden; prime after first render. */
+function primeChartsAfterDashboardRender() {
+  if (!dashboardEl || !window.__viralbiteSetActiveTab) return;
+  dashboardEl.style.visibility = "hidden";
+  window.__viralbiteSetActiveTab("analysis");
+  requestAnimationFrame(() => {
+    durationChart?.resize();
+    uploadChart?.resize();
+    sponsorChart?.resize();
+    window.__viralbiteSetActiveTab("overview");
+    dashboardEl.style.visibility = "";
+  });
+}
+
+function initScrollReveal() {
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    document.querySelectorAll(".reveal-on-scroll").forEach((el) => el.classList.add("is-visible"));
+    return;
+  }
+  scrollObserver = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((e) => {
+        if (e.isIntersecting) e.target.classList.add("is-visible");
+      });
+    },
+    { threshold: 0.06, rootMargin: "0px 0px -28px 0px" }
+  );
+  observeRevealElements();
+}
 
 function fmt(value, digits = 2) {
   if (value === null || value === undefined) return "N/A";
@@ -68,10 +277,12 @@ function truncateText(text, maxLength = 32) {
 
 function renderTopicButtons(target, topics) {
   target.innerHTML = "";
-  topics.forEach((entry) => {
+  topics.forEach((entry, idx) => {
     const topic = entry.topic || entry;
     const btn = document.createElement("button");
-    btn.className = "topic-pill";
+    const variant = PILL_VARIANTS[idx % PILL_VARIANTS.length];
+    btn.className = `topic-pill pill pill--${variant}`;
+    btn.type = "button";
     btn.textContent = topic;
     btn.addEventListener("click", () => {
       topicInput.value = topic;
@@ -122,9 +333,18 @@ function renderDurationChart(patterns) {
   const ctx = document.getElementById("durationChart");
   if (durationChart) durationChart.destroy();
 
+  const C = chartPalette();
   const filtered = (patterns || []).filter(
     (p) => p.duration_bucket && String(p.duration_bucket) !== "0-60s"
   );
+
+  const sumEl = document.getElementById("duration-chart-summary");
+  if (sumEl) {
+    const totalN = filtered.reduce((a, p) => a + (p.video_count || 0), 0);
+    sumEl.textContent = filtered.length
+      ? `${filtered.length} buckets · ${fmt(totalN, 0)} videos counted (line shows n per bucket).`
+      : "No duration buckets after filtering short clips.";
+  }
 
   durationChart = new Chart(ctx, {
     type: "bar",
@@ -134,7 +354,7 @@ function renderDurationChart(patterns) {
         {
           label: "Avg engagement rate",
           data: filtered.map((p) => (p.avg_engagement_rate || 0) * 100),
-          backgroundColor: CHART.paprika,
+          backgroundColor: C.paprika,
           borderRadius: 8,
           yAxisID: "y",
         },
@@ -142,8 +362,8 @@ function renderDurationChart(patterns) {
           label: "Video count (n)",
           data: filtered.map((p) => p.video_count || 0),
           type: "line",
-          borderColor: CHART.brick,
-          backgroundColor: CHART.saffron,
+          borderColor: C.brick,
+          backgroundColor: C.saffron,
           pointRadius: 4,
           borderWidth: 2,
           tension: 0.25,
@@ -153,10 +373,12 @@ function renderDurationChart(patterns) {
     },
     options: {
       responsive: true,
+      maintainAspectRatio: false,
+      layout: { padding: { top: 10, right: 8, bottom: 6, left: 4 } },
       plugins: {
         legend: {
           display: true,
-          labels: { color: CHART.legend, font: { size: 12, family: "'DM Sans', sans-serif" } },
+          labels: { color: C.legend, font: { size: 12, family: "'DM Sans', sans-serif" } },
         },
         tooltip: {
           callbacks: {
@@ -173,17 +395,17 @@ function renderDurationChart(patterns) {
       },
       scales: {
         x: {
-          ticks: { color: CHART.tick, font: { size: 11 } },
-          grid: { color: CHART.grid },
+          ticks: { color: C.tick, font: { size: 11 } },
+          grid: { color: C.grid },
         },
         y: {
-          ticks: { color: CHART.tick, callback: (v) => `${v}%` },
-          grid: { color: CHART.grid },
+          ticks: { color: C.tick, callback: (v) => `${v}%` },
+          grid: { color: C.grid },
         },
         yCount: {
           position: "right",
           grid: { drawOnChartArea: false },
-          ticks: { precision: 0, color: CHART.tick },
+          ticks: { precision: 0, color: C.tick },
         },
       },
     },
@@ -194,6 +416,15 @@ function renderUploadChart(uploadFrequency) {
   const ctx = document.getElementById("uploadChart");
   if (uploadChart) uploadChart.destroy();
 
+  const C = chartPalette();
+  const uploadSumEl = document.getElementById("upload-chart-summary");
+  if (uploadSumEl) {
+    const total = (uploadFrequency || []).reduce((a, x) => a + (x.video_count || 0), 0);
+    uploadSumEl.textContent = (uploadFrequency || []).length
+      ? `${uploadFrequency.length} weeks · ${fmt(total, 0)} uploads in window.`
+      : "";
+  }
+
   uploadChart = new Chart(ctx, {
     type: "bar",
     data: {
@@ -202,23 +433,25 @@ function renderUploadChart(uploadFrequency) {
         {
           label: "Videos published",
           data: uploadFrequency.map((x) => x.video_count),
-          backgroundColor: CHART.chili,
+          backgroundColor: C.chili,
           borderRadius: 8,
         },
       ],
     },
     options: {
       responsive: true,
+      maintainAspectRatio: false,
+      layout: { padding: { top: 8, right: 6, bottom: 4, left: 4 } },
       plugins: { legend: { display: false } },
       scales: {
         x: {
-          ticks: { color: CHART.tick, maxRotation: 45, minRotation: 0, font: { size: 10 } },
-          grid: { color: CHART.grid },
+          ticks: { color: C.tick, maxRotation: 45, minRotation: 0, font: { size: 10 } },
+          grid: { color: C.grid },
         },
         y: {
           beginAtZero: true,
-          ticks: { precision: 0, color: CHART.tick },
-          grid: { color: CHART.grid },
+          ticks: { precision: 0, color: C.tick },
+          grid: { color: C.grid },
           suggestedMax: Math.max(2, ...uploadFrequency.map((x) => x.video_count || 0)),
         },
       },
@@ -235,11 +468,17 @@ function renderKeywordSignals(keywords) {
 
   keywords
     .sort((a, b) => (b.avg_engagement_rate || 0) - (a.avg_engagement_rate || 0))
-    .forEach((row) => {
+    .forEach((row, idx) => {
       const chip = document.createElement("div");
-      chip.className = "keyword-chip";
+      const variant = PILL_VARIANTS[idx % PILL_VARIANTS.length];
+      chip.className = `keyword-chip pill pill--${variant}`;
       const keywordName = truncateText(row.keyword, 22);
-      chip.innerHTML = `<strong>${keywordName}</strong><span>${fmt((row.avg_engagement_rate || 0) * 100, 2)}% eng · ${row.video_count} videos</span>`;
+      const meta = `${fmt((row.avg_engagement_rate || 0) * 100, 2)}% eng · ${row.video_count} videos`;
+      const titleBlock =
+        variant === "organic"
+          ? `<span class="keyword-chip-titleline"><span class="pill-dot" aria-hidden="true"></span><strong>${keywordName}</strong></span>`
+          : `<strong>${keywordName}</strong>`;
+      chip.innerHTML = `${titleBlock}<span class="keyword-chip-meta">${meta}</span>`;
       keywordSignalsEl.appendChild(chip);
     });
 }
@@ -279,6 +518,7 @@ function renderSponsor(sponsorship) {
   const ctx = document.getElementById("sponsorChart");
   if (sponsorChart) sponsorChart.destroy();
 
+  const C = chartPalette();
   const spCount = sponsorship.sponsored_count || 0;
   const orgCount = sponsorship.organic_count || 0;
   const total = spCount + orgCount;
@@ -307,7 +547,7 @@ function renderSponsor(sponsorship) {
       datasets: [
         {
           data: [spCount, orgCount],
-          backgroundColor: [CHART.chili, CHART.saffron],
+          backgroundColor: [C.chili, C.saffron],
           borderWidth: 0,
           hoverOffset: 4,
         },
@@ -315,7 +555,8 @@ function renderSponsor(sponsorship) {
     },
     options: {
       responsive: true,
-      maintainAspectRatio: true,
+      maintainAspectRatio: false,
+      layout: { padding: { top: 6, right: 6, bottom: 6, left: 6 } },
       cutout: "58%",
       plugins: {
         legend: { display: false },
@@ -519,17 +760,23 @@ function renderCreatorBrief(finalResponse, query) {
 
   if (briefConfidenceEl) {
     const chips = [];
+    let ci = 0;
     if (conf.sample_size != null) {
-      chips.push(`<span class="brief-chip" title="Videos in analysis sample">n=${escapeHtml(fmt(conf.sample_size, 0))}</span>`);
+      const v = PILL_VARIANTS[ci++ % PILL_VARIANTS.length];
+      chips.push(
+        `<span class="brief-chip pill pill--${v}" title="Videos in analysis sample">n=${escapeHtml(fmt(conf.sample_size, 0))}</span>`
+      );
     }
     if (conf.unique_channels != null) {
+      const v = PILL_VARIANTS[ci++ % PILL_VARIANTS.length];
       chips.push(
-        `<span class="brief-chip" title="Distinct channels">${escapeHtml(fmt(conf.unique_channels, 0))} channels</span>`
+        `<span class="brief-chip pill pill--${v}" title="Distinct channels">${escapeHtml(fmt(conf.unique_channels, 0))} channels</span>`
       );
     }
     if (conf.top_two_channel_share_pct != null) {
+      const v = PILL_VARIANTS[ci++ % PILL_VARIANTS.length];
       chips.push(
-        `<span class="brief-chip" title="Share of views from the two largest channels">Top 2 ch. ${escapeHtml(fmt(conf.top_two_channel_share_pct, 0))}%</span>`
+        `<span class="brief-chip pill pill--${v}" title="Share of views from the two largest channels">Top 2 ch. ${escapeHtml(fmt(conf.top_two_channel_share_pct, 0))}%</span>`
       );
     }
 
@@ -581,6 +828,7 @@ function renderCreatorBrief(finalResponse, query) {
 }
 
 function renderDashboard(payload) {
+  lastDashboardPayload = payload;
   const analysis = payload.analysis || {};
   latestAnalysis = analysis;
   latestTopic = payload.query || topicInput.value.trim();
@@ -598,13 +846,21 @@ function renderDashboard(payload) {
   renderCreatorBrief(payload.final_response || {}, payload.query);
 
   dashboardEl.classList.remove("hidden");
+  if (window.__viralbiteSetActiveTab) {
+    window.__viralbiteSetActiveTab("overview");
+  }
+  document.querySelectorAll("#dashboard-subnav .subnav-link").forEach((a) => a.removeAttribute("aria-current"));
+  const overviewLink = document.querySelector('#dashboard-subnav a[href="#dash-overview"]');
+  if (overviewLink) overviewLink.setAttribute("aria-current", "page");
+  primeChartsAfterDashboardRender();
+  observeRevealElements();
 }
 
 async function runAnalysis(topic) {
   const query = topic?.trim();
   if (!query) return;
-  loadingEl.classList.remove("hidden");
-  loadingEl.textContent = "Fetching videos and comments...";
+  setLoadingVisible(true);
+  setLoadingStep(0);
   analyzeBtn.disabled = true;
   try {
     const params = new URLSearchParams({
@@ -616,15 +872,16 @@ async function runAnalysis(topic) {
       max_comments: String(DEFAULT_ANALYZE_PARAMS.max_comments),
     });
     const response = await fetch(`/analyze?${params.toString()}`);
+    setLoadingStep(1);
     const data = await response.json();
-    loadingEl.textContent = "Rendering dashboard...";
+    setLoadingStep(2);
+    await new Promise((r) => requestAnimationFrame(r));
     renderDashboard(data);
   } catch (error) {
     console.error(error);
     alert("Analysis failed. Check your API keys and try again.");
   } finally {
-    loadingEl.classList.add("hidden");
-    loadingEl.textContent = "Running analysis...";
+    setLoadingVisible(false);
     analyzeBtn.disabled = false;
   }
 }
@@ -638,4 +895,11 @@ chatInputEl.addEventListener("keydown", (event) => {
   if (event.key === "Enter") sendChat();
 });
 
-loadHomepageTopics();
+initTheme();
+initScrollReveal();
+initThemeToggle();
+initDashboardTabs();
+initDashboardSubnav();
+bindChartDetailsResize();
+window.addEventListener("viralbite-theme-change", refreshChartsForTheme);
+loadHomepageTopics().then(() => observeRevealElements());
