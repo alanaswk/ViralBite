@@ -96,14 +96,25 @@ function initThemeToggle() {
   });
 }
 
-function persistCreatorProfile(value) {
-  creatorProfile = String(value || "").trim();
-  localStorage.setItem("viralbite-creator-profile", creatorProfile);
+function syncCreatorProfilePreview() {
   if (creatorProfilePreviewEl) {
     creatorProfilePreviewEl.textContent = creatorProfile
       ? `Creator context: ${creatorProfile}`
       : "Creator context not set";
   }
+}
+
+/** Load saved profile into memory (does not write to localStorage). */
+function loadCreatorProfileFromStorage() {
+  const raw = localStorage.getItem("viralbite-creator-profile");
+  creatorProfile = raw == null ? "" : String(raw).trim();
+  syncCreatorProfilePreview();
+}
+
+function persistCreatorProfile(value) {
+  creatorProfile = String(value || "").trim();
+  localStorage.setItem("viralbite-creator-profile", creatorProfile);
+  syncCreatorProfilePreview();
 }
 
 function closeCreatorProfileModal() {
@@ -135,18 +146,21 @@ function openCreatorProfileModal(edit) {
   }
   creatorModalEl.classList.remove("hidden");
   creatorModalEl.setAttribute("aria-hidden", "false");
-  creatorProfileInputEl.focus();
+  requestAnimationFrame(() => {
+    creatorProfileInputEl.focus();
+  });
 }
 
 function initCreatorProfileModal() {
-  const existing = localStorage.getItem("viralbite-creator-profile") || "";
-  persistCreatorProfile(existing);
+  loadCreatorProfileFromStorage();
   if (!creatorModalEl || !creatorProfileInputEl || !creatorProfileSaveBtn) return;
 
   if (creatorProfile) {
     closeCreatorProfileModal();
   } else {
-    openCreatorProfileModal(false);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => openCreatorProfileModal(false));
+    });
   }
 
   creatorProfileSaveBtn.addEventListener("click", () => {

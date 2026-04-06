@@ -11,7 +11,7 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
-  <div id="creator-profile-modal" class="onboard-backdrop hidden" aria-hidden="true">
+  <div id="creator-profile-modal" class="onboard-backdrop hidden" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="creator-profile-modal-title">
     <div class="onboard-modal panel">
       <p id="creator-profile-modal-eyebrow" class="eyebrow">Before we start</p>
       <h2 id="creator-profile-modal-title" class="onboard-title">Who are you as a creator?</h2>
@@ -64,7 +64,7 @@
         </div>
       </div>
 
-      <section id="dashboard" class="hidden">
+      <section id="dashboard">
         <div id="tab-panel-analysis" role="tabpanel" aria-labelledby="tab-btn-analysis" class="tab-panel" data-tab-panel="analysis">
           <section class="panel landing reveal-on-scroll">
             <div class="section-title">
