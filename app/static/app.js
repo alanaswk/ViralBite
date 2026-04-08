@@ -49,6 +49,60 @@ const PILL_VARIANTS = ["terra", "cream"];
 let lastDashboardPayload = null;
 let scrollObserver = null;
 
+/** Same-tab session: survives refresh, cleared when the tab closes. */
+const SESSION_DASHBOARD_KEY = "viralbite-dashboard-session";
+
+function persistDashboardSession() {
+  if (!lastDashboardPayload) {
+    try {
+      sessionStorage.removeItem(SESSION_DASHBOARD_KEY);
+    } catch (_) {
+      /* ignore */
+    }
+    return;
+  }
+  try {
+    const snapshot = {
+      v: 1,
+      payload: lastDashboardPayload,
+      chatHistory: Array.isArray(chatHistory) ? chatHistory : [],
+    };
+    sessionStorage.setItem(SESSION_DASHBOARD_KEY, JSON.stringify(snapshot));
+  } catch (e) {
+    console.warn("Could not save dashboard to sessionStorage", e);
+  }
+}
+
+function tryRestoreDashboardSession() {
+  let raw;
+  try {
+    raw = sessionStorage.getItem(SESSION_DASHBOARD_KEY);
+  } catch (_) {
+    return;
+  }
+  if (!raw) return;
+  let data;
+  try {
+    data = JSON.parse(raw);
+  } catch (_) {
+    sessionStorage.removeItem(SESSION_DASHBOARD_KEY);
+    return;
+  }
+  if (!data || !data.payload || data.v !== 1) {
+    sessionStorage.removeItem(SESSION_DASHBOARD_KEY);
+    return;
+  }
+  const history = Array.isArray(data.chatHistory)
+    ? data.chatHistory.filter(
+        (m) =>
+          m &&
+          (m.role === "user" || m.role === "assistant") &&
+          typeof m.content === "string"
+      )
+    : [];
+  renderDashboard(data.payload, { initialChatHistory: history });
+}
+
 function chartPalette() {
   const r = document.documentElement;
   const g = (name, fallback) => {
@@ -744,6 +798,7 @@ async function sendChat() {
   const text = payload.response || "No response.";
   addChatMessage("assistant", text);
   chatHistory.push({ role: "assistant", content: text });
+  persistDashboardSession();
 }
 
 function escapeHtml(text) {
@@ -1020,18 +1075,29 @@ const CHAT_WELCOME = `Loaded analysis for **${"TOPIC"}**.
 
 Your **creator profile** is included when you chat so advice can match your niche.`;
 
-function renderDashboard(payload) {
+function renderDashboard(payload, options = {}) {
+  const { initialChatHistory } = options;
   lastDashboardPayload = payload;
   const analysis = payload.analysis || {};
   latestAnalysis = analysis;
   latestFinalResponse = payload.final_response != null ? payload.final_response : null;
-  latestTopic = payload.query || topicInput.value.trim();
-  chatHistory = [];
-  chatMessagesEl.innerHTML = "";
-  addChatMessage(
-    "assistant",
-    CHAT_WELCOME.replace("TOPIC", latestTopic)
-  );
+  latestTopic = (payload.query || topicInput.value || "").trim();
+  if (topicInput && payload.query != null && payload.query !== "") {
+    topicInput.value = payload.query;
+  }
+
+  if (Array.isArray(initialChatHistory) && initialChatHistory.length > 0) {
+    chatHistory = initialChatHistory.map((m) => ({
+      role: m.role === "user" ? "user" : "assistant",
+      content: String(m.content ?? ""),
+    }));
+    chatMessagesEl.innerHTML = "";
+    chatHistory.forEach((m) => addChatMessage(m.role, m.content));
+  } else {
+    chatHistory = [];
+    chatMessagesEl.innerHTML = "";
+    addChatMessage("assistant", CHAT_WELCOME.replace("TOPIC", latestTopic || "topic"));
+  }
 
   renderOverview(analysis.summary || {}, analysis.sample_definition || {});
   renderDurationChart(analysis.duration_patterns || []);
@@ -1048,6 +1114,7 @@ function renderDashboard(payload) {
   }
   primeChartsAfterDashboardRender();
   observeRevealElements();
+  persistDashboardSession();
 }
 
 /** Lets the browser paint loading steps before the next microtask-heavy work. */
@@ -1108,4 +1175,7 @@ initScrollReveal();
 initThemeToggle();
 initDashboardTabs();
 window.addEventListener("viralbite-theme-change", refreshChartsForTheme);
+if (creatorProfile) {
+  tryRestoreDashboardSession();
+}
 loadHomepageTopics().then(() => observeRevealElements());
